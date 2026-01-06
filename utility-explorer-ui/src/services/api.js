@@ -21,6 +21,29 @@ export const apiService = {
   async getSources() {
     const response = await api.get('/sources')
     return response.data
+  },
+  
+  async getTimeSeries(params) {
+    const response = await api.get('/timeseries', { params })
+    return response.data
+  },
+  
+  async getMap(params) {
+    const response = await api.get('/map', { params })
+    return response.data
+  },
+  
+  async getTimeSeries(params) {
+    const response = await api.get('/timeseries', { params })
+    return response.data
+  },
+  
+  async exportCsv(params) {
+    const response = await api.get('/export/csv', { 
+      params,
+      responseType: 'blob'
+    })
+    return response.data
   }
 }
 

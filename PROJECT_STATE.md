@@ -1,9 +1,9 @@
 # PROJECT_STATE.md — Utility Explorer
 
 ## Current status (as of 2026-01-06)
-- Phase/Day: Day 10 (COMPLETED)
+- Phase/Day: Day 12 (COMPLETED)
 - Repo layout: Monorepo structure
-- Local run: Docker Compose + Spring Boot + Vue UI ready
+- Local run: Docker Compose + Spring Boot + Vue UI with interactive map ready
 
 ## What is built
 - Memory Bank documentation structure
@@ -20,6 +20,8 @@
 - Ingestion framework: dispatcher + locking + mock plugin
 - Source documentation: SOURCES.md with EIA + placeholders
 - Vue UI shell: routes, transparency page with status widget
+- Interactive map: Leaflet with state boundaries, choropleth coloring, click handlers
+- Region drawer: current value + provenance + time series chart + CSV export
 
 ## What is agreed (non-negotiable)
 - No invented data (no forecasting/interpolation/imputation)
@@ -45,7 +47,7 @@
 - Cron parsing dependency for nextRunAt (return null initially)
 
 ## Next planned step
-- Day 11: Implement boundary rendering and choropleth basics
+- Day 13: Implement read-only Copilot endpoint and UI panel
 
 ## Validation commands (target)
 - docker compose up -d
