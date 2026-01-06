@@ -1,0 +1,512 @@
+Below is a **cloud + low-level architecture document** you can drop into your repo as `ARCHITECTURE.md` (and optionally split into `CLOUD-ARCHITECTURE.md` + `LLD.md`). It’s written to clearly explain **what we’re building, why, and how**—with design considerations and tradeoffs.
+
+---
+
+# Utility Explorer — Architecture and Cloud Design
+
+## 1) Purpose and Non-Negotiables
+
+### Purpose
+
+Utility Explorer is a **map-first** dashboard that visualizes **free public datasets** related to utilities (electricity, broadband, water, wastewater) with drilldowns and time series. It prioritizes **trust and provenance** over completeness.
+
+### Non-negotiables
+
+* **No ads**
+* **No forecasting, estimation, imputation, or fabricated values**
+* **No silent blending** across sources
+* **Every number must be traceable**: source + retrieved timestamp (+ published timestamp if available)
+* Ingestion jobs must follow **source-specific cadence**, not a one-size-fits-all schedule
+* **Local-first** development, **cloud-ready** deployment, **12-factor** configuration
+
+---
+
+## 2) High-Level Architecture
+
+### Logical Components
+
+* **Vue UI (Map-first dashboard)**
+* **Spring Boot API (Read endpoints + ingestion orchestration + provenance)**
+* **Postgres (facts + provenance + geo metadata + runs)**
+* **Static Boundary Assets (TopoJSON/GeoJSON)**
+* **Read-only Copilot (QuerySpec → validated → SQL → results)**
+
+### High-level diagram
+
+```text
++-------------------+       HTTPS       +-------------------------+
+|   Vue Frontend    | <---------------> |    Spring Boot API       |
+|  (static hosting) |                   |  - Map/Timeseries APIs   |
+|                   |                   |  - Sources metadata      |
++---------+---------+                   |  - Copilot (read-only)   |
+          |                             |  - Ingestion dispatcher  |
+          |                             +-----------+-------------+
+          |                                         |
+          |                                         | JDBC
+          |                                         |
+          |                             +-----------v-------------+
+          |                             |        Postgres         |
+          |                             | facts + geo + provenance|
+          |                             +-----------+-------------+
+          |
+          | (static boundary files: TopoJSON/GeoJSON)
+          v
++-------------------+
+|  Boundary Assets  |
++-------------------+
+```
+
+---
+
+## 3) Why Map-First + Read-only Copilot (Design Rationale)
+
+### Why map-first
+
+* Decision makers need “where” instantly; maps deliver that faster than tables.
+* Drilldown + historical chart is the simplest path from “insight” → “explainable evidence”.
+
+### Why read-only Copilot (not model training)
+
+* Training adds cost, drift, and trust risk.
+* Read-only Copilot can be **strictly grounded** in stored facts and can enforce provenance.
+* Copilot is a UX accelerator, not a “source of truth.”
+
+---
+
+## 4) Data Integrity Model
+
+### Provenance requirements
+
+Every value shown to users includes:
+
+* `source_id`, `source_name`
+* `retrieved_at` (when we fetched)
+* `source_published_at` (if the dataset provides it)
+* `geo_level_supported` for that metric/source
+* optional: `payload_hash` (to prove immutability)
+
+### “No manipulation” rule
+
+We will only do:
+
+* **Display-as-published** facts
+* **Transparent aggregation** when required for map presentation (e.g., count of facilities per county)
+
+  * must be labeled as aggregated
+  * must be reproducible and documented
+
+We will not do:
+
+* interpolation
+* estimation
+* predictive smoothing
+* synthetic values
+
+---
+
+## 5) Data Model (LLD)
+
+### Canonical Geography IDs
+
+* **STATE**: state FIPS (2-digit string)
+* **COUNTY**: county FIPS (5-digit string)
+* **PLACE** (city-like): Census Place GEOID (state + place)
+
+Reason: standardized, stable IDs; avoids ambiguous city boundary definitions.
+
+### Core Tables (suggested)
+
+#### `metric`
+
+Defines the “layer”
+
+* `metric_id` (PK, string)
+* `name`, `unit`
+* `default_geo_level`
+* `supported_geo_levels` (array/JSON)
+* `default_granularity` (MONTH/QUARTER/YEAR/EVENT)
+* `description`
+
+#### `source`
+
+* `source_id` (PK)
+* `name`
+* `type` = `PUBLIC` (future: `UPLOADED`)
+* `terms_url`
+* `attribution_text`
+* `notes`
+
+#### `source_config`
+
+Source-specific cadence + controls
+
+* `source_id` (FK)
+* `enabled` boolean
+* `schedule_cron` (string)
+* `check_strategy` (CHECK_AND_INGEST_IF_NEW | INGEST_ALWAYS)
+* `timezone` (default UTC)
+* `max_lookback_periods` (int)
+
+#### `source_run`
+
+* `run_id` (PK)
+* `source_id`
+* `started_at`, `ended_at`
+* `status` (SUCCESS | NO_CHANGE | FAILED)
+* `rows_upserted`
+* `error_summary`
+
+#### `raw_payload`
+
+* `payload_id` (PK)
+* `source_id`, `run_id`
+* `payload_hash`
+* `storage_ref` (path/key)
+* `stored_at`
+
+#### `region`
+
+* `region_id` (PK) internal UUID
+* `geo_level` (STATE/COUNTY/PLACE)
+* `geo_id` (FIPS/GEOID)
+* `name`
+* `parent_region_id` (nullable)
+* `centroid_lat`, `centroid_lon`
+
+#### `fact_value`
+
+The normalized numeric dataset
+
+* `metric_id`, `source_id`
+* `geo_level`, `geo_id`
+* `period_start`, `period_end`
+* `value_numeric`
+* `retrieved_at` (required)
+* `source_published_at` (nullable)
+* `is_aggregated` boolean
+* `aggregation_method` (nullable; required if aggregated)
+* `payload_id` (nullable FK to raw payload record)
+
+**Uniqueness constraint**
+`(metric_id, source_id, geo_level, geo_id, period_start, period_end)` must be unique.
+
+Rationale: enables idempotent ingestion and prevents duplicate points.
+
+---
+
+## 6) Ingestion Architecture (Jobs)
+
+### Why “source-driven cadence”
+
+Different sources update on different schedules (monthly vs release-based vs event-driven). Running everything daily wastes resources and can reduce trust (“why do you claim fresh daily if the source is monthly?”).
+
+### Dispatcher + Runner design
+
+* A lightweight dispatcher runs every N minutes (e.g., 10 minutes).
+* It queries `source_config` for **due** sources.
+* For each due source:
+
+  * acquires lock (DB advisory lock or a `source_run_lock` row)
+  * executes runner
+  * records `source_run` with `SUCCESS/NO_CHANGE/FAILED`
+
+```text
+Scheduler tick -> find due sources -> lock source -> run fetch/check
+-> if new data: ingest + upsert facts + store raw payload pointer
+-> else: NO_CHANGE
+-> unlock
+```
+
+### Change detection
+
+To avoid duplicates:
+
+* Compare “latest available period/release id” vs what we already have.
+* If unchanged: record `NO_CHANGE`, skip writes.
+
+### Idempotency rules
+
+* Upsert facts by unique key
+* Store raw payload hash; if hash unchanged, do not duplicate raw storage references (optional optimization)
+
+### Future-proofing: separate worker
+
+In v1, ingestion runs in the same Spring Boot app.
+Later, we can run ingestion as a separate “worker” container using the same codebase:
+
+* API container: serves requests only
+* Worker container: runs dispatcher only
+  Reason: scalability + isolation without rewriting.
+
+---
+
+## 7) API Design (LLD)
+
+### Response contract includes provenance
+
+Every map/timeseries response includes:
+
+* `metric`, `unit`
+* `source` metadata
+* `period`
+* `retrieved_at` (as a summary and per-point if needed)
+* `coverage` info
+
+### Core endpoints
+
+* `GET /api/v1/metrics`
+* `GET /api/v1/sources`
+* `GET /api/v1/status/sources`
+* `GET /api/v1/map?metricId=...&sourceId=...&geoLevel=...&parentGeoId=...&period=...`
+* `GET /api/v1/timeseries?metricId=...&sourceId=...&geoLevel=...&geoId=...&from=...&to=...`
+* `GET /api/v1/regions/search?q=...`
+* `GET /api/v1/regions/{geoLevel}/{geoId}`
+
+### Copilot endpoint (read-only)
+
+* `POST /api/v1/copilot/query`
+
+  * Input: natural language question
+  * Output: structured result + citations + `highlight_regions[]`
+
+### Copilot safety: QuerySpec pattern
+
+Copilot produces **QuerySpec JSON**, server validates and compiles into SQL.
+
+Allowed QuerySpec shapes (v1):
+
+* ranking
+* threshold filter
+* cross-layer intersection using latest common period
+* trend between two periods where both exist
+
+If validation fails or data missing:
+
+* respond: “Insufficient data for requested combination.”
+
+Rationale: prevents hallucination and ensures queries remain explainable.
+
+---
+
+## 8) Frontend Architecture (Vue LLD)
+
+### Key routes
+
+* `/` Map Explorer
+* `/transparency` Transparency & Methodology (static + live status widget)
+* `/status` (optional) Data Status
+
+### Key components
+
+* `LayerSelector` (metric)
+* `SourceSelector` (single or compare)
+* `GeoBreadcrumb` (US → State → County → Place)
+* `MapView` (renders boundaries + choropleth)
+* `Legend` (color scale + provenance)
+* `RegionDrawer` (details + chart + export)
+* `HistoryChart`
+* `CopilotPanel` (read-only query)
+
+### UI rules for “no gaps”
+
+* If no data for current view:
+
+  * boundaries remain visible
+  * choropleth disabled
+  * show “No data available at this geography for selected source.”
+
+### Transparency page
+
+Static content (ideology, rules, methodology) + dynamic “Data Status” box calling:
+
+* `/api/v1/status/sources`
+
+---
+
+## 9) Observability and Trust
+
+### Health and readiness
+
+* `/actuator/health`
+* `/actuator/health/readiness` (or custom)
+* `/actuator/metrics` (optional)
+
+### Operational KPIs to expose (even in MVP)
+
+* last successful ingestion per source
+* ingestion failures in last 7 days
+* freshness lag (now - last_success)
+
+### Logging
+
+* structured logs to stdout
+* log ingestion runs (source_id, run_id, status, rows_upserted)
+* never log secrets
+
+Rationale: easy to diagnose issues on a single VM and scales well later.
+
+---
+
+## 10) Security Considerations
+
+### MVP security baseline
+
+* Copilot endpoint requires an API key (even if the UI uses it)
+* rate limiting (IP-based minimal)
+* strict CORS in prod
+* dependency scanning and pinned versions
+
+Rationale: prevents abuse and keeps the demo credible.
+
+### Data integrity
+
+* facts have `retrieved_at`
+* raw payload hash stored (optional but strong for credibility)
+* clear licensing/terms links stored per source
+
+---
+
+## 11) Cloud Deployment Options
+
+## 11.1 Local Development (required)
+
+**Docker Compose**:
+
+* `postgres`
+* `api`
+* optional: `ui` for prod-like build
+
+Local-first benefits:
+
+* consistent environments
+* easy onboarding
+* mirrors production “backing services” pattern
+
+## 11.2 Cheapest reliable hosting (recommended)
+
+### Option A: Static UI + single VPS for API+DB
+
+* Vue hosted on static platform or nginx
+* Spring Boot + Postgres on a small VPS
+* backups via nightly pg_dump
+
+Why this is best:
+
+* lowest cost
+* simplest ops
+* still demonstrates cloud readiness and good engineering
+
+## 11.3 AWS-ready path (optional later)
+
+If you ever want “AWS flavor”:
+
+* UI: S3 static hosting + CloudFront (or similar)
+* API: single ECS/Fargate service (but costs more)
+* DB: RDS Postgres (costlier but managed)
+* Scheduled ingestion: ECS scheduled task or Spring worker
+
+**Design choice**: we avoid AWS-native dependencies in MVP so the project stays portable.
+
+---
+
+## 12) Design Decisions and Tradeoffs (Explicit)
+
+### Decision: Store normalized facts + provenance
+
+**Pros**
+
+* supports cross-layer queries
+* enables explainable Copilot
+* makes integrity defensible
+
+**Cons**
+
+* requires a bit more schema upfront
+
+### Decision: Source-driven cadence + dispatcher
+
+**Pros**
+
+* reduces wasted calls
+* honest freshness
+* extensible
+
+**Cons**
+
+* slightly more code than “@Scheduled daily” per source
+
+### Decision: QuerySpec instead of LLM-generated SQL
+
+**Pros**
+
+* prevents unsafe queries and hallucination
+* fully explainable and testable
+
+**Cons**
+
+* limits flexibility in v1 (which is good for trust)
+
+### Decision: City = Census Place
+
+**Pros**
+
+* stable boundaries and IDs
+* consistent nationwide coverage
+
+**Cons**
+
+* “city” may not match local mental model of city limits/ZIPs
+
+---
+
+## 13) Scalability Considerations (Without Overbuilding)
+
+### Expected MVP usage: low traffic
+
+We optimize for:
+
+* correctness
+* explainability
+* low cost
+
+Scale strategies (when needed):
+
+* cache map responses by `(metric, source, geoLevel, parent, period)`
+* precompute legend stats
+* move ingestion to a worker container
+* externalize DB to managed service
+
+---
+
+## 14) Repository Documentation Set (Recommended)
+
+Add these files to make the project “portfolio-grade”:
+
+* `REQUIREMENTS.md` (what + acceptance)
+* `ARCHITECTURE.md` (this document)
+* `TRANSPARENCY.md` (content for the transparency page)
+* `docs/adr/0001-map-first.md`
+* `docs/adr/0002-no-imputation.md`
+* `docs/adr/0003-provenance-model.md`
+* `docs/adr/0004-copilot-queryspec.md`
+* `docs/adr/0005-source-cadence-dispatcher.md`
+
+---
+
+## 15) What’s Next (Implementation Plan)
+
+1. Implement schema + Flyway migrations for core tables
+2. Build baseline UI shell (map + transparency page + source list)
+3. Implement first source ingestion (electricity state-level)
+4. Implement map and timeseries endpoints with provenance
+5. Add Copilot QuerySpec + one cross-layer query type
+6. Add Data Status page and link it from Transparency
+
+---
+
+If you want, next I can produce an **LLD package** with:
+
+* exact class/interface design for the ingestion plugin system
+* the QuerySpec JSON schema and validation rules
+* example API response payloads (map + timeseries + copilot)
+* a minimal `docker-compose.yml` + `.env.template` aligned to this architecture
