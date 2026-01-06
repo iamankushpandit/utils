@@ -1,0 +1,269 @@
+## `OBSERVABILITY_OPENTELEMETRY.md`
+
+### Why OpenTelemetry (OTel) for Utility Explorer
+
+OpenTelemetry is a **vendor-neutral standard** for collecting **traces, metrics, and logs** from your application and exporting them to one or more backends (Grafana, AWS, etc.). The big benefit for this project is that it matches your “**no integrity gaps**” principle: you can show *exactly what the system observed* (request timings, job runs, failures, data freshness) without inventing anything.
+
+What it helps with:
+
+* **Reliability & debugging:** trace a user click → API call → DB query → external source call → response
+* **Transparency:** show “data freshness” and ingestion success rates with real telemetry
+* **Cost control:** sampling + filtering in the collector lets you cap telemetry spend
+* **Portability:** you can switch observability providers later without rewriting instrumentation (export OTLP to different backends)
+
+---
+
+### How it works (the mental model)
+
+OTel has 3 major parts:
+
+1. **Instrumentation (in your code/runtime)**
+
+* Creates spans (traces), metrics, and logs.
+* Auto-instrumentation exists for Spring Boot (agent or Spring starter). ([OpenTelemetry][1])
+
+2. **OpenTelemetry Collector (recommended)**
+
+* A separate service that **receives** telemetry, **processes** it (batching/sampling/filtering), and **exports** it to one or many backends. ([OpenTelemetry][2])
+* Batching reduces outgoing calls and improves compression/cost efficiency. ([GitHub][3])
+
+3. **Backend(s) to store + query**
+
+* Grafana Cloud, AWS X-Ray + AMP + CloudWatch, self-hosted stack, etc.
+
+**Key design rule:** Apps should export to the **collector via OTLP**, and the collector exports to whatever backend(s) you choose. That keeps you cloud-agnostic. ([OpenTelemetry][4])
+
+---
+
+### What we should observe in this project (practical telemetry design)
+
+#### Traces (distributed tracing)
+
+Capture spans for:
+
+* API requests: `/map`, `/timeseries`, `/coverage`, `/copilot/query`
+* Data ingestion runs: “Fetch source → parse → upsert facts”
+* DB calls: query latency and errors
+* External calls: HTTP status, latency, retry counts
+
+**Why:** lets you answer “why is the map slow?” and “why did source X fail yesterday?”
+
+#### Metrics (for dashboards + alerts)
+
+Suggested metrics:
+
+* `http.server.requests` latency + error rate (API)
+* `job.run.success` / `job.run.failure`
+* `job.run.duration_ms`
+* `source.facts.inserted` / `source.facts.updated`
+* `data.freshness_hours{source,metric,geoLevel}` (computed at ingestion time)
+
+**Why:** this supports the Transparency page with real numbers.
+
+#### Logs (structured)
+
+* API: request id, route, latency, status, error type
+* Jobs: source id, run id, counts, next scheduled run, failure reason
+* Copilot: query type, datasets used, “insufficient data” reasons (no content)
+
+---
+
+### Instrumentation approach for your stack
+
+#### Backend (Java Spring Boot)
+
+Two safe options:
+
+**Option A (recommended): OTel Java Agent (zero-code)**
+
+* Attach the agent at runtime (no code change)
+* Configure via environment variables (12-factor)
+* Best for: fast startup, consistent behavior across environments
+  Spring Boot also has official OTel guidance and an OTel Spring Boot starter option. ([OpenTelemetry][1])
+
+**Option B: OTel Spring Boot Starter**
+
+* Uses Spring Boot integration to auto-instrument and lets you extend with custom spans/metrics if needed. ([OpenTelemetry][5])
+
+**Core configuration knobs**
+
+* `OTEL_SERVICE_NAME=utility-explorer-api`
+* `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317` (gRPC) or `4318` (HTTP)
+* `OTEL_TRACES_SAMPLER=parentbased_traceidratio` and `OTEL_TRACES_SAMPLER_ARG=0.1` (example)
+  OTLP exporter env-based configuration is standard. ([OpenTelemetry][6])
+
+#### Frontend (Vue.js)
+
+You can instrument the browser using OpenTelemetry JS:
+
+* Capture page loads, user interactions, and outbound calls (fetch/XHR)
+* Propagate trace context headers so backend traces link to frontend spans
+  OTel JS exporters support OTLP and are designed to keep data model fidelity. ([OpenTelemetry][4])
+
+**Important reality check:** browser telemetry can get noisy; keep it **minimal** in MVP (page view + API call timing + errors).
+
+---
+
+### Collector design (what it should do for us)
+
+Collector is where you enforce:
+
+* **Sampling** (reduce trace volume)
+* **Filtering** (drop noisy endpoints like health checks)
+* **Attribute scrubbing** (remove PII or high-cardinality fields)
+* **Fan-out exports** (e.g., export traces to X-Ray *and* Grafana Cloud)
+
+Collector config structure is “receivers → processors → exporters → pipelines.” ([OpenTelemetry][7])
+
+---
+
+### AWS-friendly approach (still vendor-neutral)
+
+If you deploy on AWS later, AWS Distro for OpenTelemetry (ADOT) is AWS-supported packaging of OTel components. ([AWS Distro for OpenTelemetry][8])
+It can export to:
+
+* **Amazon Managed Service for Prometheus (AMP)** for metrics ([Amazon Web Services, Inc.][9])
+* **AWS X-Ray** for traces ([AWS Documentation][10])
+* **CloudWatch Logs** (directly or via other pipelines) ([Amazon Web Services, Inc.][11])
+
+---
+
+## Cost to run observability in the cloud (low traffic)
+
+Costs depend mostly on **ingestion volume** (GB of logs/traces; metric samples) and retention.
+
+### Cheapest “good enough” option for a portfolio project
+
+**Grafana Cloud Free tier**:
+
+* Free plan includes limited monthly ingestion for logs/traces and limited retention (e.g., 14 days). ([Grafana Labs][12])
+  This is often enough for a personal portfolio / low traffic site.
+
+### AWS-native option (typical components)
+
+* **CloudWatch Logs**: log ingestion pricing is commonly quoted starting around **$0.50/GB ingested** (region-dependent). ([Amazon Web Services, Inc.][11])
+* **AMP (Managed Prometheus)**: metrics ingestion priced per sample (example shown on pricing page: $0.90 per 10,000,000 samples for initial tier). ([Amazon Web Services, Inc.][9])
+* **Amazon Managed Grafana**: priced per active user license (Editor $9/user/month; Viewer $5/user/month; at least one Editor needed). ([Amazon Web Services, Inc.][13])
+* **X-Ray**: free tier + usage-based pricing; AWS documentation highlights billing via traces recorded/retrieved and encourages sampling to control cost. ([AWS Documentation][14])
+
+### Example monthly observability spend (rough, low traffic)
+
+Assumptions (illustrative):
+
+* 300k requests/month
+* 10% trace sampling
+* 5 GB logs/month
+* ~1,000 metric series scraped every 60s
+
+Approximate:
+
+* Traces: often near $0 at small volumes if sampling is used (and free tier covers you) ([Amazon Web Services, Inc.][15])
+* Logs: ~`5 GB * $0.50/GB` ≈ **$2.50/mo** ([Amazon Web Services, Inc.][11])
+* Metrics (AMP): 43.2M samples/mo → ~**$3.89/mo** at $0.90 per 10M samples (initial tier) ([Amazon Web Services, Inc.][9])
+* Managed Grafana: minimum **$9/mo** (one Editor) ([Amazon Web Services, Inc.][13])
+
+**Ballpark for observability add-on:** ~**$15–$25/mo** (plus your app hosting costs).
+
+> If you skip Managed Grafana and instead use Grafana OSS on the same VM/container, you remove the per-user license cost but take on ops.
+
+### Self-hosted observability (cheaper, more ops)
+
+If you self-host (Collector + Grafana + Prometheus + Tempo/Jaeger + Loki) on a small VM:
+
+* Fly.io shared CPU instances can be low single-digit dollars/month for small sizes. ([Fly][16])
+* Hetzner’s small cloud plans are also low-cost (pricing varies by region). ([Hetzner][17])
+  Tradeoff: you own upgrades, storage growth, and outages.
+
+---
+
+## How OTel supports your “Transparency / Integrity” stance
+
+OTel is useful beyond “debugging”:
+
+* Every ingestion run can emit:
+
+  * `source_run_id`
+  * duration
+  * inserted/updated counts
+  * failure reason (if any)
+  * last successful retrieval timestamp
+* Your UI can display these live (or via your DB + `/status/sources`) and you can back claims with telemetry and logs.
+
+This makes your project feel *serious* and trustworthy.
+
+---
+
+## Important design considerations (so it doesn’t get messy or expensive)
+
+### 1) Sampling strategy (must-have)
+
+* Default to **10%** sampling for API traces in cloud.
+* Keep 100% sampling only in local/dev.
+* Always sample **errors at higher rate** (if supported in your policy).
+
+### 2) Cardinality controls (cost killer)
+
+Avoid high-cardinality labels like:
+
+* raw URL with query params
+* user identifiers
+* city names as metric labels
+  Instead: normalize to route templates and stable IDs.
+
+### 3) PII / sensitive data
+
+Rules:
+
+* No addresses, emails, or freeform text in span attributes.
+* Redact exception messages that might contain payloads.
+* Scrub logs at collector level when possible.
+
+### 4) Multi-backend export (for “show all sources” philosophy)
+
+You can export:
+
+* metrics → Prometheus-compatible
+* traces → X-Ray + Grafana Cloud
+  This is exactly what the collector enables. ([OpenTelemetry][2])
+
+---
+
+## Recommended path for this project (local-first → cloud-ready)
+
+1. **Local dev**
+
+* OTel Collector + Jaeger (traces) + Prometheus/Grafana (metrics) in docker-compose
+* 100% sampling
+
+2. **Cloud (cheapest reliable)**
+
+* Start with **Grafana Cloud Free** as the backend ([Grafana Labs][12])
+* Keep collector in your app stack (sidecar or separate service)
+* Set sampling to ~10%
+
+3. **Cloud (AWS-native variant)**
+
+* ADOT Collector → AMP (metrics) + X-Ray (traces) + CloudWatch Logs ([AWS Distro for OpenTelemetry][8])
+* Optional: Amazon Managed Grafana if you want AWS-managed dashboards ([Amazon Web Services, Inc.][13])
+
+---
+
+If you want, I can also add a short companion doc: **`OBSERVABILITY_DECISIONS.md`** with the exact decisions we’ll lock (sampling defaults, attribute allowlist, log retention, and what we explicitly will *not* collect).
+
+[1]: https://opentelemetry.io/docs/zero-code/java/spring-boot-starter/getting-started/?utm_source=chatgpt.com "Getting started"
+[2]: https://opentelemetry.io/docs/collector/?utm_source=chatgpt.com "Collector"
+[3]: https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/batchprocessor/README.md?utm_source=chatgpt.com "Batch Processor - open-telemetry/opentelemetry-collector"
+[4]: https://opentelemetry.io/docs/languages/js/exporters/?utm_source=chatgpt.com "Exporters"
+[5]: https://opentelemetry.io/docs/zero-code/java/spring-boot-starter/?utm_source=chatgpt.com "Spring Boot starter"
+[6]: https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/?utm_source=chatgpt.com "OTLP Exporter Configuration"
+[7]: https://opentelemetry.io/docs/collector/configuration/?utm_source=chatgpt.com "Configuration"
+[8]: https://aws-otel.github.io/docs/introduction?utm_source=chatgpt.com "Introduction - AWS Distro for OpenTelemetry"
+[9]: https://aws.amazon.com/prometheus/pricing/?utm_source=chatgpt.com "Amazon Managed Service for Prometheus Pricing"
+[10]: https://docs.aws.amazon.com/xray/latest/devguide/xray-services-adot.html?utm_source=chatgpt.com "AWS Distro for OpenTelemetry and AWS X-Ray"
+[11]: https://aws.amazon.com/cloudwatch/pricing/?utm_source=chatgpt.com "Amazon CloudWatch Pricing | Free Tier Available"
+[12]: https://grafana.com/pricing/?utm_source=chatgpt.com "Grafana Pricing | Free, Pro, Enterprise"
+[13]: https://aws.amazon.com/grafana/pricing/?utm_source=chatgpt.com "Amazon Managed Grafana Pricing"
+[14]: https://docs.aws.amazon.com/xray/latest/devguide/xray-concepts.html?utm_source=chatgpt.com "AWS X-Ray concepts"
+[15]: https://aws.amazon.com/blogs/aws/category/aws-x-ray/?utm_source=chatgpt.com "AWS X-Ray | AWS Blog"
+[16]: https://fly.io/docs/about/pricing/?utm_source=chatgpt.com "Fly.io Resource Pricing · Fly Docs"
+[17]: https://www.hetzner.com/pressroom/new-cx-plans/?utm_source=chatgpt.com "Hetzner introduces new shared vCPU cloud servers"
