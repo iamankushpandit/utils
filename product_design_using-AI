@@ -1,0 +1,368 @@
+```markdown
+# Designing Software Projects in the Age of AI (AI-Implemented Delivery Playbook)
+
+This document is a practical framework for designing software projects where **most or all implementation is done by an AI** (e.g., Amazon Q, Copilot, Claude, ChatGPT). It focuses on **how to design, document, and sequence work** so an AI can execute safely and efficiently without hallucinating, drifting, or producing brittle systems.
+
+---
+
+## 1) The New Reality: “Design Is the Product”
+When an AI writes the code, the primary engineering skill shifts from typing to:
+- making **unambiguous decisions**
+- producing **clear, bounded specifications**
+- enforcing **quality gates**
+- managing **context and change**
+
+In AI-implemented projects, *ambiguity* becomes the biggest cost driver.
+
+---
+
+## 2) What AI Can Do Extremely Well (If You Set It Up)
+AI is strong at:
+- scaffolding repositories and standard structures
+- implementing APIs from an OpenAPI contract
+- generating DB schemas and migrations from a defined model
+- writing tests when given expected inputs/outputs
+- wiring CI/CD pipelines (with strict requirements)
+- implementing repetitive features across multiple layers
+- generating documentation, diagrams, and code comments
+- refactoring code when requirements change (if boundaries are clear)
+- creating “developer experience” tooling (scripts, Makefile, Compose)
+
+AI is weaker at:
+- ambiguous product decisions (“what does city mean?”)
+- integration nuances (auth, CORS, reverse proxies)
+- subtle correctness bugs (timezones, rounding, units)
+- estimating real-world costs or compliance without fresh research
+- making decisions based on unstated assumptions
+
+Therefore: **Make the AI execute decisions, not invent them.**
+
+---
+
+## 3) Layered Delivery Model (How to Add AI Capability Over Time)
+
+### Layer 0 — Guardrails (must exist before any code)
+- Non-negotiable rules
+- Decision framework (“when to ask vs proceed”)
+- Scope boundaries (what is NOT in MVP)
+- Context management plan (how to avoid token exhaustion)
+
+### Layer 1 — Contracts and Models (AI’s source of truth)
+- API contract (OpenAPI)
+- Data model (ERD + migrations policy)
+- Domain definitions (glossary: geo levels, time semantics, units)
+- Error semantics and invariants
+
+### Layer 2 — Execution Plan (token-safe)
+- Day-wise tasks
+- Allowed files per day
+- Acceptance checks per day
+- Stop/ask conditions
+
+### Layer 3 — Implementation (AI executes)
+- Backend, frontend, jobs, tests
+- Strict adherence to contracts
+- No silent scope expansion
+
+### Layer 4 — Verification (AI + automation)
+- contract tests
+- idempotency tests
+- golden fixtures
+- end-to-end smoke tests
+- “no hallucination” checks (see Section 10)
+
+### Layer 5 — Operations and Productization
+- observability (OTel)
+- backups and resilience
+- cost controls
+- release processes
+- security posture
+
+---
+
+## 4) Minimum Documentation Set for AI-Implemented Projects
+These are the documents that keep the AI aligned and prevent drift:
+
+1) **PROJECT_STATE.md**
+   - 1 page max: what’s done, what’s next, open decisions, run commands
+2) **REQUIREMENTS.md**
+   - user stories + acceptance criteria; explicit non-goals
+3) **ARCHITECTURE.md**
+   - C4-level overview + key patterns (plugins, jobs, caching)
+4) **GLOSSARY.md**
+   - canonical definitions (e.g., “city”, “latest”, “period”)
+5) **openapi.yaml**
+   - API truth; AI must not diverge
+6) **DB_MIGRATIONS_POLICY.md**
+   - how schema changes happen; naming conventions; rollbacks
+7) **AI_IMPLEMENTATION_RULES.md**
+   - autonomy framework + stop conditions + anti-hallucination rules
+8) **DEMO.md**
+   - exact steps to demonstrate the product locally
+
+Optional but powerful:
+- **ADRs** (Architecture Decision Records) for irreversible choices
+- **SOURCES.md** (if data sources exist)
+- **SECURITY.md** and **PRIVACY.md** if user data exists
+
+---
+
+## 5) The “AI Execution Contract” (What You Require from the AI)
+Before AI starts implementing, require it to agree to:
+
+### 5.1 No-invention rule
+- It must not invent APIs, schemas, or data behavior that isn’t documented.
+
+### 5.2 Change control rule
+- If a change affects a contract (OpenAPI) or invariant, it must:
+  1) propose an ADR
+  2) wait for approval
+
+### 5.3 Atomic commits rule
+- One feature per commit/PR; always include:
+  - what changed
+  - why
+  - how to validate
+
+### 5.4 Evidence-based integrations
+- For external systems (APIs, pricing, licensing):
+  - provide evidence links or stop
+
+---
+
+## 6) Designing “Decision Points” Explicitly
+AI needs decisions turned into bounded parameters.
+
+### Example decision categories
+- Definitions: “city means Census Place”
+- Time semantics: “latest common period across metrics”
+- Missing data behavior: “show No data; never impute”
+- Performance: “cache map responses for 15 minutes”
+- Security: “API key required only for copilot endpoint”
+- Export behavior: “include provenance columns always”
+
+### Design technique: Decision Tables
+Represent decisions in small tables rather than paragraphs.
+
+Example:
+| Area | Default | Allowed Alternatives | Who Approves |
+|------|---------|----------------------|--------------|
+| Missing data | show "No data" | none | product owner |
+| Sampling | 10% prod | 1%–50% | tech lead |
+
+---
+
+## 7) AI-Friendly Specifications (How to Write Them)
+AI performs best with specs that are:
+- **finite** (bounded scope)
+- **testable** (acceptance checks)
+- **non-ambiguous** (explicit definitions)
+- **contractual** (schemas and examples)
+
+Recommended structure for each feature:
+1) Goal (one sentence)
+2) Inputs and outputs (schema + examples)
+3) Constraints (non-goals, forbidden shortcuts)
+4) Acceptance checks (curl/tests)
+5) Stop conditions
+
+---
+
+## 8) Planning Around Context Limits (Token Budget Engineering)
+AI fails when it loses track of:
+- current schema
+- endpoint names
+- internal invariants
+- repo structure
+
+### Core strategy: “daily feed pack”
+Each day you provide:
+1) `PROJECT_STATE.md` (1 page)
+2) `TODAY_TASK.md` (20 lines)
+3) Only files to be edited that day
+
+### Context reset protocol
+If the AI says:
+- “I’m not sure what schema is current”
+- “I can’t confirm endpoint paths”
+It must stop and request a recap, not guess.
+
+---
+
+## 9) Layering AI Assistance in the SDLC
+AI can help at every stage—if layered in order:
+
+### 9.1 Product discovery
+- generate personas, workflows, KPI options
+- draft wireframes and edge cases
+- propose data-model candidates
+**Human approves definitions and boundaries.**
+
+### 9.2 Architecture
+- produce C4 diagrams
+- suggest deployment options
+- design job frameworks and plugin systems
+**Human approves irreversible decisions.**
+
+### 9.3 Contracts
+- write OpenAPI and JSON schemas
+- generate DTO models
+- propose DB schema tables and indexes
+**Human approves domain semantics.**
+
+### 9.4 Implementation
+- scaffold repo + infrastructure
+- implement endpoints and UI components
+- write jobs and plugins
+**Automation verifies correctness.**
+
+### 9.5 Testing
+- generate fixtures
+- write contract tests and integration tests
+- create e2e smoke tests
+**Human reviews test intent; CI runs.**
+
+### 9.6 Documentation
+- write README, DEMO scripts, runbooks
+- generate architecture explanations for stakeholders
+
+### 9.7 Operations
+- add OpenTelemetry instrumentation
+- cost dashboards and alerts
+- SLOs and error budgets (optional)
+
+---
+
+## 10) Preventing AI Hallucination (System Controls)
+Hallucination is most dangerous when AI:
+- assumes availability of data/features
+- invents fields and endpoints
+- changes behavior silently
+
+Controls:
+1) **Contract-first checks**
+   - Every endpoint response validated against OpenAPI
+2) **Golden fixtures**
+   - Known input → expected output stored as tests
+3) **Idempotency tests**
+   - Ingestion run twice → no duplicates
+4) **Schema drift checks**
+   - Migrations match DB state (Flyway validate)
+5) **“Forbidden behaviors” tests**
+   - e.g., ensure missing data returns null/empty, not averages
+
+---
+
+## 11) The “When to Ask” Framework (Autonomy Protocol)
+AI can proceed without asking if:
+- the choice is low risk and reversible
+- does not modify contracts or invariants
+- does not add dependencies or external systems
+
+AI must ask if:
+- changes API schema or meaning
+- changes domain definitions (time, geo, units)
+- introduces monetization, tracking, auth scopes
+- relies on uncertain external facts
+- requires irreversible schema migration
+
+---
+
+## 12) Design for Maintainability (Even If AI Built It)
+AI-written code is often consistent but can be over-abstracted.
+
+Rules:
+- Prefer “boring architecture” over cleverness
+- Keep modules small and explicit
+- Avoid deep inheritance trees
+- Enforce formatting + lint rules
+- Document WHY in ADRs, not only WHAT in code
+
+---
+
+## 13) Security, Privacy, and Compliance (AI must not guess)
+AI must not invent compliance decisions.
+
+Minimum baseline:
+- secrets never in git
+- least privilege in cloud
+- sanitize logs
+- rate-limit expensive endpoints
+- clear privacy policy if any user data exists
+
+---
+
+## 14) Cost and Operational Design (AI-friendly)
+AI can help estimate and design cost controls, but you must provide boundaries:
+- max retention durations
+- sampling defaults
+- log levels per environment
+- scaling assumptions
+
+Design with:
+- feature flags for expensive features
+- kill switches for ingestion
+- configurable schedules/cadences
+
+---
+
+## 15) A Simple “AI-Implemented Project Checklist”
+Before implementation starts:
+- [ ] Requirements and non-goals are written
+- [ ] Glossary defines ambiguous terms
+- [ ] OpenAPI exists and is reviewed
+- [ ] DB schema model is defined
+- [ ] AI rules + stop conditions exist
+- [ ] Day-wise plan exists
+- [ ] Acceptance checks for every day exist
+
+During implementation:
+- [ ] Atomic commits
+- [ ] Tests for each feature
+- [ ] CI blocks merges on failures
+- [ ] Project state updated daily
+
+After implementation:
+- [ ] Demo script works
+- [ ] Observability exists (OTel)
+- [ ] Runbook exists
+- [ ] Cost controls documented
+
+---
+
+## 16) Suggested Repo Folder for AI-First Delivery
+```
+
+/docs
+REQUIREMENTS.md
+ARCHITECTURE.md
+GLOSSARY.md
+AI_IMPLEMENTATION_RULES.md
+DB_MIGRATIONS_POLICY.md
+OBSERVABILITY_OPENTELEMETRY.md
+SOURCES.md
+DEMO.md
+PROJECT_STATE.md
+today/
+DAY_01_TODAY_TASK.md
+DAY_02_TODAY_TASK.md
+...
+/utility-explorer-api
+/utility-explorer-ui
+/docker-compose.yml
+/.env.template
+
+```
+
+---
+
+## Closing: The Core Idea
+In AI-implemented projects, success comes from:
+- **designing decisions as data**
+- **making specs testable**
+- **controlling scope and context**
+- **automating verification**
+- **forcing the AI to stop instead of guessing**
+
+That’s how you build software that remains trustworthy—even when the coder is not human.
+```
