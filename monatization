@@ -1,0 +1,303 @@
+```markdown
+# Utility Explorer — Monetization Design (Ads + API Monetization) and How to Layer It In
+
+This document outlines **how Utility Explorer can monetize later** while preserving the project’s core value: **trust, transparency, provenance, and “no invented data.”**  
+It also describes **what needs to change** in the UI, backend, data model, and ops to support monetization—without rewriting the system.
+
+---
+
+## 1) Monetization Principles (Non-Negotiable Even If We Monetize)
+
+Even if we add ads or paid tiers later:
+
+1) **No pay-to-influence data.**
+   - Ads/sponsorship must never change rankings, color scales, thresholds, or visibility of sources.
+2) **Clear separation of “data” vs “monetization UI.”**
+   - Ads must be clearly labeled as ads.
+   - “Sponsored” must never appear inside data cards/legends.
+3) **Provenance must remain free and visible.**
+   - “Retrieved at”, “Published at”, sources, terms links remain accessible.
+4) **No hidden tracking.**
+   - If analytics are used, disclose them; offer privacy-respecting defaults.
+
+---
+
+## 2) Monetization Paths (Options That Fit Decision-Makers)
+
+### A) API Monetization (Best long-term, cleanest for integrity)
+**Who pays:** developers + businesses building internal tools  
+**What they pay for:** reliability, quotas, SLA, higher rate limits, commercial license, exports.
+
+Common paid features:
+- higher rate limits (RPS)
+- higher daily/monthly call quotas
+- access to bulk endpoints (batch queries)
+- historical depth limits (e.g., 5 years vs 20 years)
+- export formats (CSV/Parquet), scheduled exports
+- SLA / support / dedicated contact
+- commercial usage rights (licensing clarity)
+
+### B) Dashboard Monetization (Decision-maker friendly)
+**Who pays:** business users and analysts  
+**What they pay for:** convenience and workflow, not the raw data.
+- saved comparisons
+- shareable links (private)
+- PDF/PowerPoint reports
+- alerts (“notify me if a state crosses threshold”)
+- team accounts and access controls
+
+### C) Ads (Fallback for costs, but highest risk to trust)
+If you must add ads:
+- keep ads **outside** the map legend/data display
+- never allow “sponsored listings” that look like data
+- label and separate ad sections
+- no behavioral tracking by default (contextual ads only)
+
+### D) Sponsorship / Donations (Lower friction, low trust risk)
+- “Support this project” (GitHub Sponsors / Patreon)
+- One-time donation
+- Sponsor page with transparency disclaimers
+This can cover small costs without changing the product.
+
+---
+
+## 3) Recommended Monetization Strategy (Layered, Low-Risk)
+
+**Phase 1 (best):** API keys + quotas + paid plans (no ads)  
+**Phase 2:** Dashboard paid features (reports, sharing, alerts)  
+**Phase 3 (only if needed):** Ads (contextual, clearly separated)
+
+This keeps the project “integrity-first” and still sustainable.
+
+---
+
+## 4) What Needs to Change for Ads (UI + Backend + Policy)
+
+### 4.1 UI changes for ads (minimal and safe)
+Add fixed “ad slots” that do not touch the data experience:
+
+**Allowed placements**
+- Right sidebar below region drawer (never inside drawer’s data cards)
+- Bottom page banner below content
+- Separate “Support Us” page
+
+**Do NOT place ads**
+- inside the legend
+- inside tooltips
+- inside charts
+- in the top control bar (feels manipulative)
+- next to “sources” where it could look like an endorsement
+
+**New UI components**
+- `AdSlot` component (renders nothing if ads disabled)
+- `MonetizationBanner` (optional, toggled)
+- `PrivacyNotice` / `CookieNotice` (only if you add tracking)
+
+**Configuration approach**
+- A single feature flag: `ADS_ENABLED`
+- Server-driven config: `GET /api/v1/config/public` returns:
+  - adsEnabled
+  - adProviderName
+  - placementIds
+
+### 4.2 Backend changes for ads
+- `public_config` endpoint to drive UI
+- If using ad provider:
+  - add CSP headers
+  - privacy/consent management (depending on provider)
+- Logging: ensure no personal data leak
+
+### 4.3 Policy updates for ads
+Add docs pages:
+- `MONETIZATION_POLICY.md`
+- `PRIVACY.md`
+- `AD_POLICY.md` (explicit separation from data)
+
+---
+
+## 5) Monetizing the API (Primary Focus)
+
+### 5.1 Monetization model for the API
+You can offer:
+- **Free tier**: low rate limits + limited historical range
+- **Pro tier**: higher quotas + bulk endpoints + exports
+- **Enterprise**: SLA + dedicated support + custom integrations
+
+**Important:** Do not “paywall truth.” Paywall convenience, scale, and automation.
+
+### 5.2 What changes are needed in the backend (API monetization)
+You need five capabilities:
+
+1) **Authentication**
+   - API keys for machine-to-machine calls
+   - optional OAuth later (for dashboard user accounts)
+
+2) **Authorization / Entitlements**
+   - check what plan allows (quota, endpoints, lookback)
+   - enforce “feature gates” in one place (middleware/service)
+
+3) **Rate limiting**
+   - per API key (and/or per tenant)
+   - fixed window or token bucket
+
+4) **Usage metering**
+   - record API calls by key, endpoint, status code
+   - aggregate daily/monthly usage
+
+5) **Billing integration**
+   - Stripe (typical) for subscription + invoicing
+   - webhooks to update subscription status and plan
+
+### 5.3 Data model additions (minimal)
+Add tables (conceptual):
+
+- `tenant` (org/account)
+- `api_key`
+  - `key_hash`, `tenant_id`, `created_at`, `revoked_at`, `label`
+- `plan`
+  - plan name, monthly price, limits
+- `subscription`
+  - tenant_id, plan_id, status, stripe ids, start/end
+- `usage_event` (or aggregated)
+  - tenant_id, api_key_id, endpoint, ts, count, response_class
+- `entitlement_snapshot` (optional)
+  - resolved limits for fast enforcement
+
+### 5.4 Where enforcement happens (design)
+**One gateway layer** before controllers:
+- `AuthFilter`: resolve API key → tenant → plan
+- `RateLimitFilter`: apply RPS rules
+- `EntitlementFilter`: enforce restrictions (e.g., max historical range, bulk endpoints)
+- `UsageRecorder`: count requests
+
+This keeps the rest of your code clean.
+
+### 5.5 API product changes (endpoints)
+Add new admin/dev endpoints (can be separate “Developer Portal API”):
+
+- `POST /api/v1/dev/api-keys` (create key)
+- `GET /api/v1/dev/api-keys` (list keys)
+- `DELETE /api/v1/dev/api-keys/{id}` (revoke)
+- `GET /api/v1/dev/usage` (usage stats)
+- `GET /api/v1/dev/limits` (current plan limits)
+
+Optionally add a public status endpoint:
+- `GET /api/v1/status/service` (rate limit headers, uptime info)
+
+### 5.6 Response headers (developer-friendly)
+Return headers on all requests:
+- `X-RateLimit-Limit`
+- `X-RateLimit-Remaining`
+- `X-RateLimit-Reset`
+- `X-Plan-Name`
+
+This makes the API feel professional.
+
+---
+
+## 6) What Changes in the UI for API Monetization
+
+If you monetize the API, you likely want a basic **developer portal** (can be simple):
+
+New routes:
+- `/developers` (docs + getting started)
+- `/developers/keys` (create/revoke keys)
+- `/developers/usage` (charts/tables of usage)
+
+New components:
+- `ApiKeyManager`
+- `UsageChart`
+- `PlanComparison`
+
+Configuration toggles:
+- `DEV_PORTAL_ENABLED`
+- `BILLING_ENABLED`
+
+Keep the public map UI mostly unchanged.
+
+---
+
+## 7) How to Layer Monetization In Without Breaking MVP
+
+### Step 1 — Add “Plan-ready plumbing” (no billing yet)
+- Add `tenant` and `api_key` tables (but keep everything free)
+- Add middleware that can read an API key if present
+- Add rate limiting hooks but set limits very high (effectively off)
+
+**Result:** Architecture becomes monetization-ready without changing the UX.
+
+### Step 2 — Add limits for Copilot first
+Copilot is the easiest to protect because it can be resource-heavy.
+- require API key for `/copilot/query`
+- keep map/timeseries public
+
+**Result:** cost control without making the main product feel paywalled.
+
+### Step 3 — Add usage metering + dashboards (still free)
+- record usage in DB
+- add `/developers/usage` page
+
+**Result:** you learn what’s expensive and what users value.
+
+### Step 4 — Add billing (Stripe) and enforce plan limits
+- introduce free vs pro tiers
+- enforce quotas and rate limits
+- add bulk endpoints to Pro tier
+
+### Step 5 — Consider ads only if still needed
+- add `AdSlot` component gated by config
+- contextual only; strict ad policy
+
+---
+
+## 8) Monetization-Driven Design Considerations (Decisions to Make)
+
+### 8.1 Public vs Paid boundaries
+Decide what stays public forever:
+- transparency page
+- source list + terms + retrieved timestamps
+- map exploration for low-volume usage
+
+Decide what can be paid:
+- bulk downloads
+- higher limits
+- scheduled exports
+- saved reports and sharing
+- Copilot heavy usage
+
+### 8.2 Multi-tenancy
+Even if MVP is single-tenant, monetization pushes you toward:
+- tenant scoping for usage and keys
+- later: teams, roles (admin vs viewer)
+
+### 8.3 Legal / policy docs
+If selling API access:
+- Terms of Service
+- Privacy Policy
+- API Usage Policy
+- Attribution requirements for customers (if needed)
+
+---
+
+## 9) “Decision Maker” Packaging (What Makes It Desirable)
+To attract higher-paying decision makers, the dashboard value is:
+- fast comparisons
+- scenario queries across layers
+- exportable evidence with provenance
+- shareable reports with citations
+
+That’s what they pay for—not the raw numbers.
+
+---
+
+## 10) Summary: Best Monetization Plan
+- **Primary:** monetize the API (keys + quotas + bulk + SLA)
+- **Secondary:** monetize decision-maker workflow features (reports, alerts, sharing)
+- **Last resort:** ads (clearly separated, contextual only)
+
+This keeps the trust story intact and gives you a strong “product thinking” narrative.
+
+---
+```
+
+If you want next: I can extend your existing `openapi.yaml` design with the **developer portal + API key + usage endpoints** (still just design), and outline a “Free vs Pro plan” limits table that fits your integrity rules.
