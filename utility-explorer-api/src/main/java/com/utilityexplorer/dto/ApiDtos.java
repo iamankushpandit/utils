@@ -460,3 +460,89 @@ class LastRunInfo {
     public String getErrorSummary() { return errorSummary; }
     public void setErrorSummary(String errorSummary) { this.errorSummary = errorSummary; }
 }
+
+class CopilotResponse {
+    private String status;
+    private String summary;
+    private PeriodInfo period;
+    private TableResult table;
+    private List<HighlightRegion> highlightRegions;
+    private List<CitationInfo> citations;
+    private List<String> notes;
+    
+    public CopilotResponse() {}
+    
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    
+    public String getSummary() { return summary; }
+    public void setSummary(String summary) { this.summary = summary; }
+    
+    public PeriodInfo getPeriod() { return period; }
+    public void setPeriod(PeriodInfo period) { this.period = period; }
+    
+    public TableResult getTable() { return table; }
+    public void setTable(TableResult table) { this.table = table; }
+    
+    public List<HighlightRegion> getHighlightRegions() { return highlightRegions; }
+    public void setHighlightRegions(List<HighlightRegion> highlightRegions) { this.highlightRegions = highlightRegions; }
+    
+    public List<CitationInfo> getCitations() { return citations; }
+    public void setCitations(List<CitationInfo> citations) { this.citations = citations; }
+    
+    public List<String> getNotes() { return notes; }
+    public void setNotes(List<String> notes) { this.notes = notes; }
+}
+
+class TableResult {
+    private List<String> columns;
+    private List<List<Object>> rows;
+    
+    public TableResult(List<String> columns, List<List<Object>> rows) {
+        this.columns = columns;
+        this.rows = rows;
+    }
+    
+    public List<String> getColumns() { return columns; }
+    public void setColumns(List<String> columns) { this.columns = columns; }
+    
+    public List<List<Object>> getRows() { return rows; }
+    public void setRows(List<List<Object>> rows) { this.rows = rows; }
+}
+
+class HighlightRegion {
+    private String geoLevel;
+    private String geoId;
+    
+    public HighlightRegion(String geoLevel, String geoId) {
+        this.geoLevel = geoLevel;
+        this.geoId = geoId;
+    }
+    
+    public String getGeoLevel() { return geoLevel; }
+    public void setGeoLevel(String geoLevel) { this.geoLevel = geoLevel; }
+    
+    public String getGeoId() { return geoId; }
+    public void setGeoId(String geoId) { this.geoId = geoId; }
+}
+
+class CitationInfo {
+    private String sourceId;
+    private String retrievedAt;
+    private String termsUrl;
+    
+    public CitationInfo(String sourceId, String retrievedAt, String termsUrl) {
+        this.sourceId = sourceId;
+        this.retrievedAt = retrievedAt;
+        this.termsUrl = termsUrl;
+    }
+    
+    public String getSourceId() { return sourceId; }
+    public void setSourceId(String sourceId) { this.sourceId = sourceId; }
+    
+    public String getRetrievedAt() { return retrievedAt; }
+    public void setRetrievedAt(String retrievedAt) { this.retrievedAt = retrievedAt; }
+    
+    public String getTermsUrl() { return termsUrl; }
+    public void setTermsUrl(String termsUrl) { this.termsUrl = termsUrl; }
+}

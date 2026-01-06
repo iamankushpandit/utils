@@ -44,6 +44,14 @@ export const apiService = {
       responseType: 'blob'
     })
     return response.data
+  },
+  
+  async queryCopilot(question, apiKey) {
+    const response = await api.post('/copilot/query', 
+      { question },
+      { headers: { 'X-API-Key': apiKey } }
+    )
+    return response.data
   }
 }
 

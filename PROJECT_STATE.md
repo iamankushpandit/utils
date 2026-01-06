@@ -1,9 +1,9 @@
 # PROJECT_STATE.md — Utility Explorer
 
 ## Current status (as of 2026-01-06)
-- Phase/Day: Day 12 (COMPLETED)
+- Phase/Day: Day 14 (COMPLETED - MVP READY)
 - Repo layout: Monorepo structure
-- Local run: Docker Compose + Spring Boot + Vue UI with interactive map ready
+- Local run: Docker Compose + Spring Boot + Vue UI fully functional
 
 ## What is built
 - Memory Bank documentation structure
@@ -22,6 +22,9 @@
 - Vue UI shell: routes, transparency page with status widget
 - Interactive map: Leaflet with state boundaries, choropleth coloring, click handlers
 - Region drawer: current value + provenance + time series chart + CSV export
+- Read-only Copilot: QuerySpec validation + API key auth + structured responses
+- Integration tests: Full endpoint coverage + Copilot safety verification
+- Complete documentation: DEMO.md with step-by-step walkthrough
 
 ## What is agreed (non-negotiable)
 - No invented data (no forecasting/interpolation/imputation)
@@ -47,9 +50,10 @@
 - Cron parsing dependency for nextRunAt (return null initially)
 
 ## Next planned step
-- Day 13: Implement read-only Copilot endpoint and UI panel
+- MVP COMPLETE: Ready for deployment and real data source integration
 
-## Validation commands (target)
-- docker compose up -d
+## Validation commands (MVP COMPLETE)
+- docker compose up -d --build
 - curl http://localhost:8080/actuator/health
-- cd utility-explorer-ui && npm run dev
+- cd utility-explorer-ui && npm install && npm run dev
+- Open http://localhost:5173 and follow DEMO.md walkthrough

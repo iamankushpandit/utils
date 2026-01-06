@@ -47,6 +47,8 @@
       :selectedSource="selectedSource"
       @close="closeDrawer"
     />
+    
+    <CopilotPanel @highlightRegions="onHighlightRegions" />
   </div>
 </template>
 
@@ -54,12 +56,14 @@
 import { apiService } from '../services/api.js'
 import MapComponent from '../components/MapComponent.vue'
 import RegionDrawer from '../components/RegionDrawer.vue'
+import CopilotPanel from '../components/CopilotPanel.vue'
 
 export default {
   name: 'MapExplorer',
   components: {
     MapComponent,
-    RegionDrawer
+    RegionDrawer,
+    CopilotPanel
   },
   data() {
     return {
@@ -126,6 +130,11 @@ export default {
     closeDrawer() {
       this.drawerOpen = false
       this.selectedRegion = null
+    },
+    
+    onHighlightRegions(regions) {
+      console.log('Highlight regions:', regions)
+      // Could implement map highlighting here
     }
   }
 }
