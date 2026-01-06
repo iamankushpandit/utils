@@ -320,3 +320,77 @@ class MapValue {
     public String getRetrievedAt() { return retrievedAt; }
     public void setRetrievedAt(String retrievedAt) { this.retrievedAt = retrievedAt; }
 }
+
+class TimeSeriesResponse {
+    private MetricInfo metric;
+    private SourceInfo source;
+    private RegionInfo region;
+    private List<TimeSeriesPoint> points;
+    
+    public TimeSeriesResponse() {}
+    
+    public MetricInfo getMetric() { return metric; }
+    public void setMetric(MetricInfo metric) { this.metric = metric; }
+    
+    public SourceInfo getSource() { return source; }
+    public void setSource(SourceInfo source) { this.source = source; }
+    
+    public RegionInfo getRegion() { return region; }
+    public void setRegion(RegionInfo region) { this.region = region; }
+    
+    public List<TimeSeriesPoint> getPoints() { return points; }
+    public void setPoints(List<TimeSeriesPoint> points) { this.points = points; }
+}
+
+class RegionInfo {
+    private String geoLevel;
+    private String geoId;
+    private String name;
+    
+    public RegionInfo(String geoLevel, String geoId, String name) {
+        this.geoLevel = geoLevel;
+        this.geoId = geoId;
+        this.name = name;
+    }
+    
+    public String getGeoLevel() { return geoLevel; }
+    public void setGeoLevel(String geoLevel) { this.geoLevel = geoLevel; }
+    
+    public String getGeoId() { return geoId; }
+    public void setGeoId(String geoId) { this.geoId = geoId; }
+    
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+}
+
+class TimeSeriesPoint {
+    private String periodStart;
+    private String periodEnd;
+    private Double value;
+    private String retrievedAt;
+    private String sourcePublishedAt;
+    
+    public TimeSeriesPoint(String periodStart, String periodEnd, Double value, 
+                          String retrievedAt, String sourcePublishedAt) {
+        this.periodStart = periodStart;
+        this.periodEnd = periodEnd;
+        this.value = value;
+        this.retrievedAt = retrievedAt;
+        this.sourcePublishedAt = sourcePublishedAt;
+    }
+    
+    public String getPeriodStart() { return periodStart; }
+    public void setPeriodStart(String periodStart) { this.periodStart = periodStart; }
+    
+    public String getPeriodEnd() { return periodEnd; }
+    public void setPeriodEnd(String periodEnd) { this.periodEnd = periodEnd; }
+    
+    public Double getValue() { return value; }
+    public void setValue(Double value) { this.value = value; }
+    
+    public String getRetrievedAt() { return retrievedAt; }
+    public void setRetrievedAt(String retrievedAt) { this.retrievedAt = retrievedAt; }
+    
+    public String getSourcePublishedAt() { return sourcePublishedAt; }
+    public void setSourcePublishedAt(String sourcePublishedAt) { this.sourcePublishedAt = sourcePublishedAt; }
+}
