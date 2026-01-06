@@ -38,6 +38,16 @@ if [ ! -f utility-explorer-ui/.env ]; then
     print_success "Created UI .env from template"
 fi
 
+set -a
+# shellcheck disable=SC1091
+source .env
+# shellcheck disable=SC1091
+source utility-explorer-ui/.env
+set +a
+
+SERVER_PORT=${SERVER_PORT:-8080}
+FRONTEND_PORT=${VITE_DEV_PORT:-5173}
+
 # Start backend with live logs
 print_status "Starting backend services..."
 docker compose down 2>/dev/null || true
@@ -46,7 +56,7 @@ docker compose up -d --build
 # Wait for backend
 print_status "Waiting for backend..."
 for i in {1..30}; do
-    if curl -s http://localhost:8080/actuator/health > /dev/null 2>&1; then
+    if curl -s "http://localhost:${SERVER_PORT}/actuator/health" > /dev/null 2>&1; then
         print_success "Backend ready!"
         break
     fi
@@ -62,8 +72,8 @@ cd ..
 print_success "🎉 Development environment ready!"
 echo
 echo "📊 Access URLs:"
-echo "   Frontend: http://localhost:5173"
-echo "   Backend:  http://localhost:8080"
+echo "   Frontend: http://localhost:${FRONTEND_PORT}"
+echo "   Backend:  http://localhost:${SERVER_PORT}"
 echo
 echo "🔧 Development Commands:"
 echo "   Frontend dev server: cd utility-explorer-ui && npm run dev"
@@ -72,8 +82,8 @@ echo "   Database access:     docker compose exec postgres psql -U utility_explo
 echo "   Stop services:       docker compose down"
 echo
 echo "📋 Quick Tests:"
-echo "   curl http://localhost:8080/actuator/health"
-echo "   curl http://localhost:8080/api/v1/metrics"
+echo "   curl http://localhost:${SERVER_PORT}/actuator/health"
+echo "   curl http://localhost:${SERVER_PORT}/api/v1/metrics"
 echo
 echo "🚀 To start frontend development server:"
 echo "   cd utility-explorer-ui && npm run dev"

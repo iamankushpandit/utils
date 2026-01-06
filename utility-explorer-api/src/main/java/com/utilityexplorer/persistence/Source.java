@@ -23,6 +23,9 @@ public class Source {
     private String attributionText;
     
     private String notes;
+
+    @Column(name = "is_mock", nullable = false)
+    private boolean isMock = false;
     
     // Constructors
     public Source() {}
@@ -55,4 +58,7 @@ public class Source {
     
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
+
+    public boolean isMock() { return isMock; }
+    public void setMock(boolean mock) { isMock = mock; }
 }

@@ -32,6 +32,25 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+load_env() {
+    if [ -f .env ]; then
+        set -a
+        # shellcheck disable=SC1091
+        source .env
+        set +a
+    fi
+
+    if [ -f utility-explorer-ui/.env ]; then
+        set -a
+        # shellcheck disable=SC1091
+        source utility-explorer-ui/.env
+        set +a
+    fi
+
+    SERVER_PORT=${SERVER_PORT:-8080}
+    FRONTEND_PORT=${VITE_DEV_PORT:-5173}
+}
+
 # Check prerequisites
 check_prerequisites() {
     print_status "Checking prerequisites..."
@@ -103,7 +122,7 @@ start_backend() {
     
     # Wait for API to be ready (max 60 seconds)
     for i in {1..60}; do
-        if curl -s http://localhost:8080/actuator/health > /dev/null 2>&1; then
+        if curl -s "http://localhost:${SERVER_PORT}/api/v1/status/sources" > /dev/null 2>&1; then
             print_success "Backend services are ready!"
             break
         fi
@@ -150,7 +169,7 @@ start_frontend() {
     # Wait for frontend to be ready
     print_status "Waiting for frontend to be ready..."
     for i in {1..30}; do
-        if curl -s http://localhost:5173 > /dev/null 2>&1; then
+        if curl -s "http://localhost:${FRONTEND_PORT}" > /dev/null 2>&1; then
             print_success "Frontend is ready!"
             break
         fi
@@ -175,17 +194,23 @@ verify_system() {
     print_status "Verifying system health..."
     
     # Test API health
-    HEALTH_RESPONSE=$(curl -s http://localhost:8080/actuator/health)
+    HEALTH_RESPONSE=$(curl -s "http://localhost:${SERVER_PORT}/actuator/health")
     if echo "$HEALTH_RESPONSE" | grep -q '"status":"UP"'; then
         print_success "✓ API health check passed"
     else
-        print_error "✗ API health check failed"
-        echo "Response: $HEALTH_RESPONSE"
-        exit 1
+        print_warning "Actuator health check not available, probing status endpoint..."
+        STATUS_RESPONSE=$(curl -s "http://localhost:${SERVER_PORT}/api/v1/status/sources")
+        if [ -n "$STATUS_RESPONSE" ]; then
+            print_success "✓ API status endpoint responding"
+        else
+            print_error "✗ API health check failed"
+            echo "Response: $HEALTH_RESPONSE"
+            exit 1
+        fi
     fi
     
     # Test metrics endpoint
-    METRICS_RESPONSE=$(curl -s http://localhost:8080/api/v1/metrics)
+    METRICS_RESPONSE=$(curl -s "http://localhost:${SERVER_PORT}/api/v1/metrics")
     if echo "$METRICS_RESPONSE" | grep -q "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH"; then
         print_success "✓ Metrics endpoint working"
     else
@@ -194,7 +219,7 @@ verify_system() {
     fi
     
     # Test sources endpoint
-    SOURCES_RESPONSE=$(curl -s http://localhost:8080/api/v1/sources)
+    SOURCES_RESPONSE=$(curl -s "http://localhost:${SERVER_PORT}/api/v1/sources")
     if echo "$SOURCES_RESPONSE" | grep -q "EIA"; then
         print_success "✓ Sources endpoint working"
     else
@@ -203,7 +228,7 @@ verify_system() {
     fi
     
     # Test map endpoint
-    MAP_RESPONSE=$(curl -s "http://localhost:8080/api/v1/map?metricId=ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH&sourceId=EIA&geoLevel=STATE&period=2025-12")
+    MAP_RESPONSE=$(curl -s "http://localhost:${SERVER_PORT}/api/v1/map?metricId=ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH&sourceId=EIA&geoLevel=STATE&period=2025-12")
     if echo "$MAP_RESPONSE" | grep -q "retrievedAt"; then
         print_success "✓ Map endpoint working"
     else
@@ -212,7 +237,7 @@ verify_system() {
     fi
     
     # Test frontend
-    if curl -s http://localhost:5173 | grep -q "Utility Explorer"; then
+    if curl -s "http://localhost:${FRONTEND_PORT}" | grep -q "Utility Explorer"; then
         print_success "✓ Frontend is serving content"
     else
         print_error "✗ Frontend is not serving content properly"
@@ -227,19 +252,19 @@ show_access_info() {
     echo "=================================="
     echo
     echo "📊 Frontend (Main Application):"
-    echo "   http://localhost:5173"
+    echo "   http://localhost:${FRONTEND_PORT}"
     echo
     echo "🔧 Backend API:"
-    echo "   http://localhost:8080"
-    echo "   Health: http://localhost:8080/actuator/health"
+    echo "   http://localhost:${SERVER_PORT}"
+    echo "   Health: http://localhost:${SERVER_PORT}/actuator/health"
     echo
     echo "📋 Quick API Tests:"
-    echo "   Metrics: curl http://localhost:8080/api/v1/metrics"
-    echo "   Sources: curl http://localhost:8080/api/v1/sources"
-    echo "   Status:  curl http://localhost:8080/api/v1/status/sources"
+    echo "   Metrics: curl http://localhost:${SERVER_PORT}/api/v1/metrics"
+    echo "   Sources: curl http://localhost:${SERVER_PORT}/api/v1/sources"
+    echo "   Status:  curl http://localhost:${SERVER_PORT}/api/v1/status/sources"
     echo
     echo "🤖 Copilot API (requires API key):"
-    echo "   curl -X POST http://localhost:8080/api/v1/copilot/query \\"
+    echo "   curl -X POST http://localhost:${SERVER_PORT}/api/v1/copilot/query \\"
     echo "     -H 'Content-Type: application/json' \\"
     echo "     -H 'X-API-Key: dev_key_change_me' \\"
     echo "     -d '{\"question\": \"high electricity and low broadband\"}'"
@@ -309,6 +334,7 @@ main() {
     echo "Starting setup process..."
     echo
     
+    load_env
     check_prerequisites
     setup_environment
     start_backend

@@ -28,7 +28,16 @@
     </section>
     
     <section class="data-status">
-      <h2>Live Data Status</h2>
+      <div class="section-header">
+        <div>
+          <h2>Live Data Status</h2>
+          <p class="section-subtitle">Trigger a fresh ingest or review the latest source runs.</p>
+        </div>
+        <button class="run-now-btn" :disabled="running" @click="runNow">
+          {{ running ? 'Running...' : 'Run now' }}
+        </button>
+      </div>
+      <div v-if="runMessage" :class="['run-message', runMessageTone]">{{ runMessage }}</div>
       <div v-if="loading" class="loading">Loading status...</div>
       <div v-else-if="error" class="error">Failed to load status: {{ error }}</div>
       <div v-else class="status-table">
@@ -36,6 +45,7 @@
           <thead>
             <tr>
               <th>Source</th>
+              <th>Data</th>
               <th>Status</th>
               <th>Schedule</th>
               <th>Last Success</th>
@@ -45,6 +55,11 @@
           <tbody>
             <tr v-for="source in sourcesStatus" :key="source.sourceId">
               <td class="source-name">{{ getSourceName(source.sourceId) }}</td>
+              <td>
+                <span :class="['data-badge', isSourceMock(source.sourceId) ? 'mock' : 'live']">
+                  {{ isSourceMock(source.sourceId) ? 'Mock' : 'Live' }}
+                </span>
+              </td>
               <td>
                 <span :class="['status-badge', source.enabled ? 'enabled' : 'disabled']">
                   {{ source.enabled ? 'Enabled' : 'Disabled' }}
@@ -97,7 +112,10 @@ export default {
       sourcesStatus: [],
       sources: [],
       loading: false,
-      error: null
+      error: null,
+      running: false,
+      runMessage: null,
+      runMessageTone: 'info'
     }
   },
   async mounted() {
@@ -123,10 +141,34 @@ export default {
         this.loading = false
       }
     },
+
+    async runNow() {
+      try {
+        this.running = true
+        this.runMessage = null
+        this.runMessageTone = 'info'
+
+        const result = await apiService.runIngestion()
+        this.runMessage = result.message || 'Ingestion dispatched.'
+        this.runMessageTone = result.status === 'disabled' ? 'warning' : 'success'
+
+        await this.loadStatus()
+      } catch (error) {
+        this.runMessage = error.response?.data?.message || error.message
+        this.runMessageTone = 'error'
+      } finally {
+        this.running = false
+      }
+    },
     
     getSourceName(sourceId) {
       const source = this.sources.find(s => s.sourceId === sourceId)
       return source ? source.name : sourceId
+    },
+
+    isSourceMock(sourceId) {
+      const source = this.sources.find(s => s.sourceId === sourceId)
+      return source ? source.isMock : false
     },
     
     formatTimestamp(timestamp) {
@@ -140,25 +182,39 @@ export default {
 <style scoped>
 .transparency {
   max-width: 100%;
+  animation: fadeUp 0.6s ease both;
 }
 
 section {
-  background: white;
+  background: var(--surface-2);
   padding: 2rem;
-  border-radius: 8px;
+  border-radius: 16px;
   margin-bottom: 2rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
 }
 
 h1 {
-  color: #2c3e50;
+  color: var(--ink);
   margin-bottom: 2rem;
 }
 
 h2 {
-  color: #34495e;
+  color: var(--ink);
+  margin-bottom: 0.5rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 1.5rem;
-  border-bottom: 2px solid #3498db;
-  padding-bottom: 0.5rem;
+}
+
+.section-subtitle {
+  color: var(--ink-muted);
+  font-size: 0.95rem;
 }
 
 .principle-grid {
@@ -169,13 +225,13 @@ h2 {
 
 .principle-card {
   padding: 1.5rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  background: #f9f9f9;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
 }
 
 .principle-card h3 {
-  color: #2c3e50;
+  color: var(--ink);
   margin-bottom: 0.5rem;
 }
 
@@ -191,13 +247,13 @@ table {
 th, td {
   padding: 0.75rem;
   text-align: left;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border);
 }
 
 th {
-  background: #f8f9fa;
+  background: var(--surface-3);
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .source-name {
@@ -209,16 +265,37 @@ th {
   border-radius: 4px;
   font-size: 0.875rem;
   font-weight: 500;
+  background: var(--surface-3);
+}
+
+.data-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: var(--surface-3);
+}
+
+.data-badge.mock {
+  background: rgba(200, 137, 42, 0.18);
+  color: var(--warning);
+}
+
+.data-badge.live {
+  background: rgba(47, 143, 104, 0.15);
+  color: var(--success);
 }
 
 .status-badge.enabled {
-  background: #d4edda;
-  color: #155724;
+  background: rgba(47, 143, 104, 0.15);
+  color: var(--success);
 }
 
 .status-badge.disabled {
-  background: #f8d7da;
-  color: #721c24;
+  background: rgba(177, 76, 76, 0.15);
+  color: var(--danger);
 }
 
 .schedule {
@@ -228,7 +305,7 @@ th {
 
 .timestamp {
   font-size: 0.875rem;
-  color: #666;
+  color: var(--ink-muted);
 }
 
 .last-run {
@@ -246,44 +323,111 @@ th {
 }
 
 .run-status.success {
-  background: #d4edda;
-  color: #155724;
+  background: rgba(47, 143, 104, 0.15);
+  color: var(--success);
 }
 
 .run-status.no_change {
-  background: #fff3cd;
-  color: #856404;
+  background: rgba(200, 137, 42, 0.18);
+  color: var(--warning);
 }
 
 .run-status.failed {
-  background: #f8d7da;
-  color: #721c24;
+  background: rgba(177, 76, 76, 0.15);
+  color: var(--danger);
 }
 
 .run-time {
   font-size: 0.75rem;
-  color: #666;
+  color: var(--ink-muted);
 }
 
 .no-runs {
   font-style: italic;
-  color: #999;
+  color: var(--ink-muted);
 }
 
 .loading, .error {
   padding: 1rem;
   text-align: center;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .loading {
-  background: #f8f9fa;
-  color: #666;
+  background: var(--surface-3);
+  color: var(--ink-muted);
 }
 
 .error {
-  background: #f8d7da;
-  color: #721c24;
+  background: rgba(177, 76, 76, 0.12);
+  color: var(--danger);
+}
+
+.run-now-btn {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #ffffff;
+  border: none;
+  padding: 0.65rem 1.25rem;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(26, 138, 122, 0.25);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.run-now-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(26, 138, 122, 0.3);
+}
+
+.run-now-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.run-message {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+}
+
+.run-message.success {
+  background: rgba(47, 143, 104, 0.12);
+  color: var(--success);
+  border-color: rgba(47, 143, 104, 0.3);
+}
+
+.run-message.warning {
+  background: rgba(200, 137, 42, 0.12);
+  color: var(--warning);
+  border-color: rgba(200, 137, 42, 0.35);
+}
+
+.run-message.error {
+  background: rgba(177, 76, 76, 0.12);
+  color: var(--danger);
+  border-color: rgba(177, 76, 76, 0.3);
+}
+
+.run-message.info {
+  background: rgba(26, 138, 122, 0.1);
+  color: var(--accent-strong);
+  border-color: rgba(26, 138, 122, 0.25);
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 ul {

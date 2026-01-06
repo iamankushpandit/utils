@@ -5,18 +5,391 @@
         <h2>{{ region?.name || 'Region Details' }}</h2>
         <button class="close-btn" @click="closeDrawer">&times;</button>
       </div>
-      
+
       <div class="drawer-content">
         <div v-if="loading" class="loading">Loading...</div>
-        
+
         <div v-else-if="error" class="error">
           {{ error }}
         </div>
-        
+
         <div v-else-if="timeSeriesData">
           <div class="current-value">
             <h3>Current Value</h3>
             <div class="value-card">
               <div class="value">
                 {{ getCurrentValue() }} {{ timeSeriesData.metric.unit }}
-              </div>\n              <div class=\"provenance\">\n                <small>{{ timeSeriesData.source.name }}</small><br>\n                <small>Retrieved: {{ formatDate(getCurrentPoint()?.retrievedAt) }}</small>\n              </div>\n            </div>\n          </div>\n          \n          <div class=\"chart-section\">\n            <h3>Historical Data</h3>\n            <div class=\"chart-container\">\n              <canvas ref=\"chartCanvas\"></canvas>\n            </div>\n          </div>\n          \n          <div class=\"actions\">\n            <button @click=\"exportData\" class=\"export-btn\" :disabled=\"exporting\">\n              {{ exporting ? 'Exporting...' : 'Export CSV' }}\n            </button>\n          </div>\n        </div>\n        \n        <div v-else class=\"no-data\">\n          <p>No data available for this region.</p>\n        </div>\n      </div>\n    </div>\n  </div>\n</template>\n\n<script>\nimport { Chart, registerables } from 'chart.js'\nimport { apiService } from '../services/api.js'\n\nChart.register(...registerables)\n\nexport default {\n  name: 'RegionDrawer',\n  props: {\n    isOpen: Boolean,\n    region: Object,\n    selectedMetric: String,\n    selectedSource: String\n  },\n  data() {\n    return {\n      timeSeriesData: null,\n      loading: false,\n      error: null,\n      chart: null,\n      exporting: false\n    }\n  },\n  watch: {\n    isOpen: {\n      handler: 'onOpenChange',\n      immediate: true\n    },\n    region: 'loadTimeSeriesData',\n    selectedMetric: 'loadTimeSeriesData',\n    selectedSource: 'loadTimeSeriesData'\n  },\n  methods: {\n    onOpenChange() {\n      if (this.isOpen && this.region) {\n        this.loadTimeSeriesData()\n      } else {\n        this.destroyChart()\n      }\n    },\n    \n    async loadTimeSeriesData() {\n      if (!this.isOpen || !this.region || !this.selectedMetric || !this.selectedSource) {\n        return\n      }\n      \n      try {\n        this.loading = true\n        this.error = null\n        \n        const params = {\n          metricId: this.selectedMetric,\n          sourceId: this.selectedSource,\n          geoLevel: this.region.geoLevel,\n          geoId: this.region.geoId,\n          from: '2025-01-01',\n          to: '2025-12-31'\n        }\n        \n        this.timeSeriesData = await apiService.getTimeSeries(params)\n        \n        // Wait for next tick to ensure canvas is rendered\n        this.$nextTick(() => {\n          this.createChart()\n        })\n        \n      } catch (error) {\n        console.error('Failed to load time series:', error)\n        this.error = 'Failed to load data'\n        this.timeSeriesData = null\n      } finally {\n        this.loading = false\n      }\n    },\n    \n    createChart() {\n      if (!this.timeSeriesData?.points || !this.$refs.chartCanvas) return\n      \n      this.destroyChart()\n      \n      const ctx = this.$refs.chartCanvas.getContext('2d')\n      const points = this.timeSeriesData.points\n      \n      this.chart = new Chart(ctx, {\n        type: 'line',\n        data: {\n          labels: points.map(p => this.formatPeriod(p.periodStart)),\n          datasets: [{\n            label: this.timeSeriesData.metric.unit,\n            data: points.map(p => p.value),\n            borderColor: '#3498db',\n            backgroundColor: 'rgba(52, 152, 219, 0.1)',\n            tension: 0.1,\n            fill: true\n          }]\n        },\n        options: {\n          responsive: true,\n          maintainAspectRatio: false,\n          scales: {\n            y: {\n              beginAtZero: false,\n              title: {\n                display: true,\n                text: this.timeSeriesData.metric.unit\n              }\n            },\n            x: {\n              title: {\n                display: true,\n                text: 'Period'\n              }\n            }\n          },\n          plugins: {\n            legend: {\n              display: false\n            },\n            tooltip: {\n              callbacks: {\n                label: (context) => {\n                  const point = points[context.dataIndex]\n                  return [\n                    `Value: ${point.value} ${this.timeSeriesData.metric.unit}`,\n                    `Retrieved: ${this.formatDate(point.retrievedAt)}`\n                  ]\n                }\n              }\n            }\n          }\n        }\n      })\n    },\n    \n    destroyChart() {\n      if (this.chart) {\n        this.chart.destroy()\n        this.chart = null\n      }\n    },\n    \n    getCurrentValue() {\n      if (!this.timeSeriesData?.points?.length) return 'N/A'\n      const latest = this.timeSeriesData.points[this.timeSeriesData.points.length - 1]\n      return latest.value\n    },\n    \n    getCurrentPoint() {\n      if (!this.timeSeriesData?.points?.length) return null\n      return this.timeSeriesData.points[this.timeSeriesData.points.length - 1]\n    },\n    \n    async exportData() {\n      if (!this.region || !this.selectedMetric || !this.selectedSource) return\n      \n      try {\n        this.exporting = true\n        \n        const params = {\n          metricId: this.selectedMetric,\n          sourceId: this.selectedSource,\n          geoLevel: this.region.geoLevel,\n          geoId: this.region.geoId,\n          from: '2025-01-01',\n          to: '2025-12-31'\n        }\n        \n        const blob = await apiService.exportCsv(params)\n        \n        // Create download link\n        const url = window.URL.createObjectURL(blob)\n        const link = document.createElement('a')\n        link.href = url\n        link.download = `${this.region.name}_${this.selectedMetric}.csv`\n        document.body.appendChild(link)\n        link.click()\n        document.body.removeChild(link)\n        window.URL.revokeObjectURL(url)\n        \n      } catch (error) {\n        console.error('Export failed:', error)\n      } finally {\n        this.exporting = false\n      }\n    },\n    \n    closeDrawer() {\n      this.$emit('close')\n    },\n    \n    formatDate(dateString) {\n      if (!dateString) return 'Unknown'\n      return new Date(dateString).toLocaleString()\n    },\n    \n    formatPeriod(dateString) {\n      if (!dateString) return ''\n      const date = new Date(dateString)\n      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' })\n    }\n  },\n  \n  beforeUnmount() {\n    this.destroyChart()\n  }\n}\n</script>\n\n<style scoped>\n.drawer-overlay {\n  position: fixed;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  background: rgba(0, 0, 0, 0.5);\n  z-index: 1000;\n  display: flex;\n  justify-content: flex-end;\n}\n\n.drawer {\n  background: white;\n  width: 500px;\n  height: 100%;\n  overflow-y: auto;\n  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);\n}\n\n.drawer-header {\n  padding: 1.5rem;\n  border-bottom: 1px solid #e0e0e0;\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  background: #f8f9fa;\n}\n\n.drawer-header h2 {\n  margin: 0;\n  color: #2c3e50;\n}\n\n.close-btn {\n  background: none;\n  border: none;\n  font-size: 1.5rem;\n  cursor: pointer;\n  color: #666;\n  padding: 0;\n  width: 30px;\n  height: 30px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n\n.close-btn:hover {\n  color: #333;\n}\n\n.drawer-content {\n  padding: 1.5rem;\n}\n\n.current-value {\n  margin-bottom: 2rem;\n}\n\n.current-value h3 {\n  margin-bottom: 1rem;\n  color: #2c3e50;\n}\n\n.value-card {\n  background: #f8f9fa;\n  padding: 1.5rem;\n  border-radius: 6px;\n  border-left: 4px solid #3498db;\n}\n\n.value {\n  font-size: 2rem;\n  font-weight: bold;\n  color: #2c3e50;\n  margin-bottom: 0.5rem;\n}\n\n.provenance {\n  color: #666;\n}\n\n.chart-section {\n  margin-bottom: 2rem;\n}\n\n.chart-section h3 {\n  margin-bottom: 1rem;\n  color: #2c3e50;\n}\n\n.chart-container {\n  height: 300px;\n  background: white;\n  border: 1px solid #e0e0e0;\n  border-radius: 6px;\n  padding: 1rem;\n}\n\n.actions {\n  display: flex;\n  gap: 1rem;\n}\n\n.export-btn {\n  background: #3498db;\n  color: white;\n  border: none;\n  padding: 0.75rem 1.5rem;\n  border-radius: 4px;\n  cursor: pointer;\n  font-size: 1rem;\n  transition: background-color 0.2s;\n}\n\n.export-btn:hover:not(:disabled) {\n  background: #2980b9;\n}\n\n.export-btn:disabled {\n  background: #bdc3c7;\n  cursor: not-allowed;\n}\n\n.loading, .error, .no-data {\n  text-align: center;\n  padding: 2rem;\n  color: #666;\n}\n\n.error {\n  color: #e74c3c;\n}\n</style>", "oldStr": ""}]
+              </div>
+              <div class="provenance">
+                <small>{{ timeSeriesData.source.name }}</small><br>
+                <small class="data-flag">Data: {{ timeSeriesData.source.isMock ? 'Mock' : 'Live' }}</small><br>
+                <small>Retrieved: {{ formatDate(getCurrentPoint()?.retrievedAt) }}</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-section">
+            <h3>Historical Data</h3>
+            <div class="chart-container">
+              <div ref="chartContainer"></div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button @click="exportData" class="export-btn" :disabled="exporting">
+              {{ exporting ? 'Exporting...' : 'Export CSV' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-else class="no-data">
+          <p>No data available for this region.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { apiService } from '../services/api.js'
+import Highcharts from 'highcharts'
+
+export default {
+  name: 'RegionDrawer',
+  props: {
+    isOpen: Boolean,
+    region: Object,
+    selectedMetric: String,
+    selectedSource: String
+  },
+  data() {
+    return {
+      timeSeriesData: null,
+      loading: false,
+      error: null,
+      chart: null,
+      exporting: false
+    }
+  },
+  watch: {
+    isOpen: {
+      handler: 'onOpenChange',
+      immediate: true
+    },
+    region: 'loadTimeSeriesData',
+    selectedMetric: 'loadTimeSeriesData',
+    selectedSource: 'loadTimeSeriesData'
+  },
+  methods: {
+    onOpenChange() {
+      if (this.isOpen && this.region) {
+        this.loadTimeSeriesData()
+      } else {
+        this.destroyChart()
+      }
+    },
+
+    async loadTimeSeriesData() {
+      if (!this.isOpen || !this.region || !this.selectedMetric || !this.selectedSource) {
+        return
+      }
+
+      try {
+        this.loading = true
+        this.error = null
+
+        const { from, to } = this.getLastYearRange()
+        const params = {
+          metricId: this.selectedMetric,
+          sourceId: this.selectedSource,
+          geoLevel: this.region.geoLevel,
+          geoId: this.region.geoId,
+          from,
+          to
+        }
+
+        this.timeSeriesData = await apiService.getTimeSeries(params)
+
+        // Wait for next tick to ensure canvas is rendered
+        this.$nextTick(() => {
+          this.createChart()
+        })
+      } catch (error) {
+        console.error('Failed to load time series:', error)
+        this.error = 'Failed to load data'
+        this.timeSeriesData = null
+      } finally {
+        this.loading = false
+      }
+    },
+
+    createChart() {
+      if (!this.timeSeriesData?.points || !this.$refs.chartContainer) return
+
+      this.destroyChart()
+
+      const points = this.timeSeriesData.points
+      const categories = points.map(p => this.formatPeriod(p.periodStart))
+      const seriesData = points.map(p => p.value)
+      const unit = this.timeSeriesData.metric.unit
+
+      this.chart = Highcharts.chart(this.$refs.chartContainer, {
+        chart: {
+          type: 'line',
+          backgroundColor: 'transparent',
+          height: 300
+        },
+        title: { text: null },
+        credits: { enabled: false },
+        xAxis: {
+          categories,
+          title: { text: 'Period' }
+        },
+        yAxis: {
+          title: { text: unit }
+        },
+        tooltip: {
+          formatter() {
+            const point = points[this.point.index]
+            const retrieved = point?.retrievedAt ? new Date(point.retrievedAt).toLocaleString() : 'Unknown'
+            return `Value: ${this.y} ${unit}<br/>Retrieved: ${retrieved}`
+          }
+        },
+        legend: { enabled: false },
+        series: [
+          {
+            name: unit,
+            data: seriesData,
+            color: '#1a8a7a'
+          }
+        ]
+      })
+    },
+
+    destroyChart() {
+      if (this.chart) {
+        this.chart.destroy()
+        this.chart = null
+      }
+    },
+
+    getCurrentValue() {
+      if (!this.timeSeriesData?.points?.length) return 'N/A'
+      const latest = this.timeSeriesData.points[this.timeSeriesData.points.length - 1]
+      return latest.value
+    },
+
+    getCurrentPoint() {
+      if (!this.timeSeriesData?.points?.length) return null
+      return this.timeSeriesData.points[this.timeSeriesData.points.length - 1]
+    },
+
+    async exportData() {
+      if (!this.region || !this.selectedMetric || !this.selectedSource) return
+
+      try {
+        this.exporting = true
+
+        const { from, to } = this.getLastYearRange()
+        const params = {
+          metricId: this.selectedMetric,
+          sourceId: this.selectedSource,
+          geoLevel: this.region.geoLevel,
+          geoId: this.region.geoId,
+          from,
+          to
+        }
+
+        const blob = await apiService.exportCsv(params)
+
+        // Create download link
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${this.region.name}_${this.selectedMetric}.csv`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+      } catch (error) {
+        console.error('Export failed:', error)
+      } finally {
+        this.exporting = false
+      }
+    },
+
+    closeDrawer() {
+      this.$emit('close')
+    },
+
+    formatDate(dateString) {
+      if (!dateString) return 'Unknown'
+      return new Date(dateString).toLocaleString()
+    },
+
+    formatPeriod(dateString) {
+      if (!dateString) return ''
+      const date = new Date(dateString)
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+    },
+
+    getLastYearRange() {
+      const end = new Date()
+      const start = new Date(end.getFullYear(), end.getMonth() - 11, 1)
+      const from = start.toISOString().slice(0, 10)
+      const to = new Date(end.getFullYear(), end.getMonth() + 1, 0).toISOString().slice(0, 10)
+      return { from, to }
+    }
+  },
+
+  beforeUnmount() {
+    this.destroyChart()
+  }
+}
+</script>
+
+<style scoped>
+.drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(7, 20, 18, 0.55);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.drawer {
+  background: var(--surface-2);
+  width: 500px;
+  height: 100%;
+  overflow-y: auto;
+  box-shadow: -10px 0 30px rgba(10, 25, 22, 0.2);
+}
+
+.drawer-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface-3);
+}
+
+.drawer-header h2 {
+  margin: 0;
+  color: var(--ink);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--ink-muted);
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  color: var(--ink);
+}
+
+.drawer-content {
+  padding: 1.5rem;
+}
+
+.current-value {
+  margin-bottom: 2rem;
+}
+
+.current-value h3 {
+  margin-bottom: 1rem;
+  color: var(--ink);
+}
+
+.value-card {
+  background: var(--surface);
+  padding: 1.5rem;
+  border-radius: 6px;
+  border-left: 4px solid var(--accent);
+}
+
+.value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--ink);
+  margin-bottom: 0.5rem;
+}
+
+.provenance {
+  color: var(--ink-muted);
+}
+
+.data-flag {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.chart-section {
+  margin-bottom: 2rem;
+}
+
+.chart-section h3 {
+  margin-bottom: 1rem;
+  color: var(--ink);
+}
+
+.chart-container {
+  height: 300px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.export-btn {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s;
+  box-shadow: 0 8px 18px rgba(26, 138, 122, 0.25);
+}
+
+.export-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1b9c8a, #147a6b);
+}
+
+.export-btn:disabled {
+  background: #c9c1b7;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.loading,
+.error,
+.no-data {
+  text-align: center;
+  padding: 2rem;
+  color: var(--ink-muted);
+}
+
+.error {
+  color: var(--danger);
+}
+</style>

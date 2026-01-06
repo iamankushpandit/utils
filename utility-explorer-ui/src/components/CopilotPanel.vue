@@ -154,16 +154,17 @@ export default {
 
 <style scoped>
 .copilot-panel {
-  background: white;
-  border-radius: 8px;
+  background: var(--surface-2);
+  border-radius: 16px;
   padding: 1.5rem;
   margin-top: 2rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
 }
 
 .copilot-panel h3 {
   margin-bottom: 1rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .input-group {
@@ -175,29 +176,33 @@ export default {
 .query-input {
   flex: 1;
   padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   font-size: 1rem;
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .query-btn {
-  background: #3498db;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   color: white;
   border: none;
   padding: 0.75rem 1.5rem;
-  border-radius: 4px;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 1rem;
   transition: background-color 0.2s;
+  box-shadow: 0 8px 18px rgba(26, 138, 122, 0.25);
 }
 
 .query-btn:hover:not(:disabled) {
-  background: #2980b9;
+  background: linear-gradient(135deg, #1b9c8a, #147a6b);
 }
 
 .query-btn:disabled {
-  background: #bdc3c7;
+  background: #c9c1b7;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .examples {
@@ -207,26 +212,27 @@ export default {
 .examples p {
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
-  color: #666;
+  color: var(--ink-muted);
 }
 
 .example-btn {
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
+  background: var(--surface);
+  border: 1px solid var(--border);
   padding: 0.25rem 0.5rem;
   margin: 0.25rem;
   border-radius: 3px;
   cursor: pointer;
   font-size: 0.8rem;
   transition: background-color 0.2s;
+  color: var(--ink);
 }
 
 .example-btn:hover {
-  background: #e9ecef;
+  background: var(--surface-3);
 }
 
 .response-section {
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--border);
   padding-top: 1rem;
   margin-top: 1rem;
 }
@@ -240,7 +246,7 @@ export default {
 
 .response-header h4 {
   margin: 0;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .status-badge {
@@ -252,13 +258,13 @@ export default {
 }
 
 .status-badge.ok {
-  background: #d4edda;
-  color: #155724;
+  background: rgba(47, 143, 104, 0.15);
+  color: var(--success);
 }
 
 .status-badge.insufficient_data {
-  background: #fff3cd;
-  color: #856404;
+  background: rgba(200, 137, 42, 0.18);
+  color: var(--warning);
 }
 
 .results-table {
@@ -275,11 +281,11 @@ export default {
 .results-table td {
   padding: 0.5rem;
   text-align: left;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border);
 }
 
 .results-table th {
-  background: #f8f9fa;
+  background: var(--surface-3);
   font-weight: 600;
 }
 
@@ -289,7 +295,7 @@ export default {
 
 .citations h5 {
   margin-bottom: 0.5rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .citations ul {
@@ -303,7 +309,7 @@ export default {
 }
 
 .citations a {
-  color: #3498db;
+  color: var(--accent-strong);
   text-decoration: none;
 }
 
@@ -318,18 +324,18 @@ export default {
 
 .note {
   font-size: 0.9rem;
-  color: #666;
+  color: var(--ink-muted);
   margin-bottom: 0.25rem;
 }
 
 .error-section {
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--border);
   padding-top: 1rem;
   margin-top: 1rem;
 }
 
 .error {
-  color: #e74c3c;
+  color: var(--danger);
   margin: 0;
 }
 </style>

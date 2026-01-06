@@ -53,8 +53,13 @@ public class MapService {
         
         // Build response
         MapResponse response = new MapResponse();
-        response.setMetric(new MetricInfo(metricId, metric.get().getUnit()));
-        response.setSource(new SourceInfo(sourceId, source.get().getName(), source.get().getTermsUrl()));
+        response.setMetric(new MetricInfo(metricId, metric.get().getName(), metric.get().getUnit()));
+        response.setSource(new SourceInfo(
+            sourceId,
+            source.get().getName(),
+            source.get().getTermsUrl(),
+            source.get().isMock()
+        ));
         response.setGeoLevel(geoLevel);
         response.setParent(parentGeoId);
         response.setPeriod(new PeriodInfo(periodStart.toString(), periodEnd.toString()));

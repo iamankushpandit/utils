@@ -22,6 +22,11 @@ export const apiService = {
     const response = await api.get('/sources')
     return response.data
   },
+
+  async runIngestion() {
+    const response = await api.post('/ingestion/run')
+    return response.data
+  },
   
   async getTimeSeries(params) {
     const response = await api.get('/timeseries', { params })

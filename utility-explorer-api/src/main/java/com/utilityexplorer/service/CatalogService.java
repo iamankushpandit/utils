@@ -64,7 +64,8 @@ public class CatalogService {
             source.getType(),
             source.getTermsUrl(),
             source.getAttributionText(),
-            source.getNotes()
+            source.getNotes(),
+            source.isMock()
         );
     }
 }

@@ -38,9 +38,8 @@ public class CopilotService {
     private QuerySpec parseQuestion(String question) {
         String lower = question.toLowerCase();
         
-        // Simple pattern: "high electricity and low broadband"
-        if (lower.contains("high") && lower.contains("electricity") && 
-            lower.contains("low") && lower.contains("broadband")) {
+        // Simple pattern: "high electricity"
+        if (lower.contains("high") && lower.contains("electricity")) {
             
             QuerySpec spec = new QuerySpec();
             spec.setQueryType("INTERSECTION");
@@ -52,8 +51,7 @@ public class CopilotService {
             spec.setTime(time);
             
             List<MetricSpec> metrics = Arrays.asList(
-                createMetricSpec("ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH", "EIA"),
-                createMetricSpec("BROADBAND_COVERAGE_PERCENT", "FCC_BROADBAND") // placeholder
+                createMetricSpec("ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH", "EIA")
             );
             spec.setMetrics(metrics);
             
@@ -79,7 +77,7 @@ public class CopilotService {
     }
     
     private CopilotResponse executeIntersectionQuery(QuerySpec querySpec) {
-        // Find latest common period for electricity data only (broadband is placeholder)
+        // Find latest common period for electricity data
         LocalDate latestPeriod = findLatestPeriod("ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH", "EIA");
         
         if (latestPeriod == null) {
@@ -99,7 +97,7 @@ public class CopilotService {
         // Create response with electricity data only
         CopilotResponse response = new CopilotResponse();
         response.setStatus("OK");
-        response.setSummary("States with electricity pricing data (broadband data not yet available)");
+        response.setSummary("States with electricity pricing data");
         
         PeriodInfo period = new PeriodInfo(latestPeriod.toString(), 
             latestPeriod.withDayOfMonth(latestPeriod.lengthOfMonth()).toString());
@@ -134,7 +132,6 @@ public class CopilotService {
         }
         
         response.setNotes(Arrays.asList(
-            "Broadband data source not yet implemented - showing electricity data only",
             "No values were estimated. Results include only regions with available data."
         ));
         

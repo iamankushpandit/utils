@@ -1,53 +1,81 @@
 <template>
   <div class="map-explorer">
     <h1>Map Explorer</h1>
-    
-    <div class="controls-panel">
-      <div class="control-group">
-        <label>Metric:</label>
-        <select v-model="selectedMetric" @change="loadMapData">
-          <option value="">Select metric...</option>
-          <option v-for="metric in metrics" :key="metric.metricId" :value="metric.metricId">
-            {{ metric.name }} ({{ metric.unit }})
-          </option>
-        </select>
+
+    <div class="metric-tabs" role="tablist">
+      <button
+        v-for="metric in metrics"
+        :key="metric.metricId"
+        :class="['metric-tab', metric.metricId === selectedMetricId ? 'active' : '']"
+        @click="selectMetric(metric.metricId)"
+        role="tab"
+        :aria-selected="metric.metricId === selectedMetricId"
+      >
+        <span class="metric-name">{{ metric.name }}</span>
+        <span class="metric-unit">{{ metric.unit }}</span>
+      </button>
+    </div>
+
+    <div v-if="activeMetric" class="metric-section">
+      <div class="metric-meta">
+        <div>
+          <h2>{{ activeMetric.name }}</h2>
+          <p class="metric-description">{{ activeMetric.description }}</p>
+        </div>
+        <div class="metric-badges">
+          <span class="badge">{{ activeMetric.defaultGranularity }}</span>
+          <span class="badge">{{ activeMetric.supportedGeoLevels.join(', ') }}</span>
+        </div>
       </div>
-      
-      <div class="control-group">
-        <label>Source:</label>
-        <select v-model="selectedSource" @change="loadMapData">
-          <option value="">Select source...</option>
-          <option v-for="source in sources" :key="source.sourceId" :value="source.sourceId">
-            {{ source.name }}
-          </option>
-        </select>
-      </div>
-      
-      <div class="control-group">
-        <label>Period:</label>
-        <select v-model="selectedPeriod" @change="loadMapData">
-          <option value="2025-12">December 2025</option>
-          <option value="2025-11">November 2025</option>
-          <option value="2025-10">October 2025</option>
-        </select>
+
+      <div class="source-grid">
+        <div
+          v-for="source in getSourcesForMetric(activeMetric.metricId)"
+          :key="source.sourceId"
+          class="source-card"
+        >
+          <div class="source-header">
+            <div>
+              <h3>{{ source.name }}</h3>
+              <p class="source-note">
+                {{ source.isMock ? 'Mock data' : 'Live source' }}
+              </p>
+            </div>
+            <span
+              :class="['data-pill', source.isMock ? 'mock' : 'live']"
+            >
+              {{ source.isMock ? 'Mock' : 'Live' }}
+            </span>
+          </div>
+
+          <div class="source-meta">
+            <span class="meta-label">Period</span>
+            <span class="meta-value">{{ getPeriodLabel(activeMetric.metricId, source.sourceId) }}</span>
+          </div>
+
+          <div v-if="isLoading(activeMetric.metricId, source.sourceId)" class="loading-card">
+            Loading map data...
+          </div>
+          <div v-else-if="getError(activeMetric.metricId, source.sourceId)" class="error-card">
+            {{ getError(activeMetric.metricId, source.sourceId) }}
+          </div>
+          <MapComponent
+            v-else
+            :mapData="getMapData(activeMetric.metricId, source.sourceId)"
+            @regionClick="onRegionClick"
+          />
+        </div>
       </div>
     </div>
-    
-    <div class="map-section">
-      <MapComponent 
-        :mapData="mapData" 
-        @regionClick="onRegionClick"
-      />
-    </div>
-    
+
     <RegionDrawer
       :isOpen="drawerOpen"
       :region="selectedRegion"
-      :selectedMetric="selectedMetric"
-      :selectedSource="selectedSource"
+      :selectedMetric="selectedMetricId"
+      :selectedSource="selectedSourceId"
       @close="closeDrawer"
     />
-    
+
     <CopilotPanel @highlightRegions="onHighlightRegions" />
   </div>
 </template>
@@ -69,13 +97,19 @@ export default {
     return {
       metrics: [],
       sources: [],
-      selectedMetric: '',
-      selectedSource: '',
-      selectedPeriod: '2025-12',
-      mapData: null,
-      loading: false,
+      selectedMetricId: '',
+      selectedSourceId: '',
+      mapDataByKey: {},
+      loadingByKey: {},
+      errorByKey: {},
+      periodByKey: {},
       drawerOpen: false,
       selectedRegion: null
+    }
+  },
+  computed: {
+    activeMetric() {
+      return this.metrics.find((metric) => metric.metricId === this.selectedMetricId) || null
     }
   },
   async mounted() {
@@ -84,57 +118,124 @@ export default {
   methods: {
     async loadCatalog() {
       try {
-        this.loading = true
         const [metrics, sources] = await Promise.all([
           apiService.getMetrics(),
           apiService.getSources()
         ])
         this.metrics = metrics
         this.sources = sources
+        if (metrics.length > 0) {
+          this.selectMetric(metrics[0].metricId)
+        }
       } catch (error) {
         console.error('Failed to load catalog:', error)
-      } finally {
-        this.loading = false
       }
     },
-    
-    async loadMapData() {
-      if (!this.selectedMetric || !this.selectedSource) {
-        this.mapData = null
-        return
-      }
-      
+
+    selectMetric(metricId) {
+      if (this.selectedMetricId === metricId) return
+      this.selectedMetricId = metricId
+      this.selectedSourceId = ''
+      this.loadMetricMaps(metricId)
+    },
+
+    async loadMetricMaps(metricId) {
+      const sources = this.getSourcesForMetric(metricId)
+      await Promise.all(
+        sources.map((source) => this.loadSourceMap(metricId, source.sourceId))
+      )
+    },
+
+    async loadSourceMap(metricId, sourceId) {
+      const key = this.buildKey(metricId, sourceId)
+      this.loadingByKey[key] = true
+      this.errorByKey[key] = null
+
       try {
-        this.loading = true
-        const params = {
-          metricId: this.selectedMetric,
-          sourceId: this.selectedSource,
-          geoLevel: 'STATE',
-          period: this.selectedPeriod
-        }
-        
-        this.mapData = await apiService.getMap(params)
+        const { mapData, periodLabel } = await this.fetchBestMap(metricId, sourceId)
+        this.mapDataByKey[key] = mapData
+        this.periodByKey[key] = periodLabel
       } catch (error) {
         console.error('Failed to load map data:', error)
-        this.mapData = null
+        this.errorByKey[key] = 'Failed to load map data'
       } finally {
-        this.loading = false
+        this.loadingByKey[key] = false
       }
     },
-    
+
+    async fetchBestMap(metricId, sourceId) {
+      const now = new Date()
+      const attempts = 60
+      let fallback = null
+      let fallbackPeriod = null
+
+      for (let i = 0; i <= attempts; i++) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+
+        const mapData = await apiService.getMap({
+          metricId,
+          sourceId,
+          geoLevel: 'STATE',
+          period
+        })
+
+        if (mapData?.values?.length) {
+          return { mapData, periodLabel: period }
+        }
+
+        if (!fallback) {
+          fallback = mapData
+          fallbackPeriod = period
+        }
+      }
+
+      return { mapData: fallback, periodLabel: fallbackPeriod || 'Unknown' }
+    },
+
+    buildKey(metricId, sourceId) {
+      return `${metricId}::${sourceId}`
+    },
+
+    getMapData(metricId, sourceId) {
+      return this.mapDataByKey[this.buildKey(metricId, sourceId)] || null
+    },
+
+    getPeriodLabel(metricId, sourceId) {
+      return this.periodByKey[this.buildKey(metricId, sourceId)] || 'Loading...'
+    },
+
+    isLoading(metricId, sourceId) {
+      return Boolean(this.loadingByKey[this.buildKey(metricId, sourceId)])
+    },
+
+    getError(metricId, sourceId) {
+      return this.errorByKey[this.buildKey(metricId, sourceId)]
+    },
+
     onRegionClick(region) {
       this.selectedRegion = region
       this.drawerOpen = true
+      const sources = this.getSourcesForMetric(this.selectedMetricId)
+      if (!this.selectedSourceId && sources.length > 0) {
+        this.selectedSourceId = sources[0].sourceId
+      }
     },
-    
+
     closeDrawer() {
       this.drawerOpen = false
       this.selectedRegion = null
     },
-    
+
     onHighlightRegions(regions) {
       console.log('Highlight regions:', regions)
-      // Could implement map highlighting here
+    },
+
+    getSourcesForMetric(metricId) {
+      if (metricId === 'ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH') {
+        return this.sources.filter((source) => source.sourceId === 'EIA')
+      }
+      return this.sources
     }
   }
 }
@@ -145,64 +246,158 @@ export default {
   max-width: 100%;
 }
 
-.controls-panel {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 8px;
+.metric-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
   margin-bottom: 2rem;
+}
+
+.metric-tab {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 1rem 1.25rem;
+  border-radius: 18px;
+  cursor: pointer;
   display: flex;
-  gap: 2rem;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.metric-tab.active {
+  background: linear-gradient(135deg, rgba(26, 138, 122, 0.15), rgba(240, 180, 79, 0.15));
+  border-color: rgba(26, 138, 122, 0.4);
+  box-shadow: 0 10px 20px rgba(10, 25, 22, 0.12);
+}
+
+.metric-tab:hover {
+  transform: translateY(-1px);
+}
+
+.metric-name {
+  font-weight: 600;
+}
+
+.metric-unit {
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+}
+
+.metric-section {
+  background: var(--surface-2);
+  padding: 1.5rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  min-height: 70vh;
+}
+
+.metric-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
   flex-wrap: wrap;
 }
 
-.control-group {
+.metric-description {
+  color: var(--ink-muted);
+  margin-top: 0.4rem;
+}
+
+.metric-badges {
   display: flex;
-  flex-direction: column;
   gap: 0.5rem;
-  min-width: 200px;
+  flex-wrap: wrap;
 }
 
-.control-group label {
-  font-weight: 500;
-  color: #333;
+.badge {
+  background: var(--surface-3);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
 }
 
-.control-group select {
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
+.source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
 }
 
-.map-placeholder {
-  background: white;
-  border-radius: 8px;
-  height: 500px;
+.source-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.source-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  border: 2px dashed #e0e0e0;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
 }
 
-.map-section {
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+.source-note {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
 }
 
-.placeholder-content {
-  text-align: center;
-  color: #666;
+.data-pill {
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.placeholder-content h3 {
+.data-pill.mock {
+  background: rgba(200, 137, 42, 0.18);
+  color: var(--warning);
+}
+
+.data-pill.live {
+  background: rgba(47, 143, 104, 0.15);
+  color: var(--success);
+}
+
+.source-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 1rem;
-  color: #333;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
 }
 
-.hint {
-  font-style: italic;
-  margin-top: 1rem;
+.meta-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.loading-card,
+.error-card {
+  padding: 1rem;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.loading-card {
+  background: var(--surface-3);
+  color: var(--ink-muted);
+}
+
+.error-card {
+  background: rgba(177, 76, 76, 0.12);
+  color: var(--danger);
 }
 </style>

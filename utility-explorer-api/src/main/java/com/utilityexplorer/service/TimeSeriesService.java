@@ -42,8 +42,13 @@ public class TimeSeriesService {
         
         // Build response
         TimeSeriesResponse response = new TimeSeriesResponse();
-        response.setMetric(new MetricInfo(metricId, metric.get().getUnit()));
-        response.setSource(new SourceInfo(sourceId, source.get().getName(), source.get().getTermsUrl()));
+        response.setMetric(new MetricInfo(metricId, metric.get().getName(), metric.get().getUnit()));
+        response.setSource(new SourceInfo(
+            sourceId,
+            source.get().getName(),
+            source.get().getTermsUrl(),
+            source.get().isMock()
+        ));
         response.setRegion(new RegionInfo(geoLevel, geoId, region.get().getName()));
         
         List<TimeSeriesPoint> points = facts.stream()

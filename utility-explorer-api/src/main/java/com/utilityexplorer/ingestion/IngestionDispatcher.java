@@ -7,6 +7,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.time.Clock;
@@ -17,6 +19,8 @@ import java.util.UUID;
 @Service
 @ConditionalOnProperty(name = "INGESTION_DISPATCHER_ENABLED", havingValue = "true")
 public class IngestionDispatcher {
+
+    private static final Logger logger = LoggerFactory.getLogger(IngestionDispatcher.class);
     
     @Autowired
     private SourceConfigRepository sourceConfigRepository;
@@ -39,27 +43,45 @@ public class IngestionDispatcher {
     @Scheduled(fixedDelayString = "${INGESTION_TICK_SECONDS:600}000")
     public void dispatchIngestion() {
         Instant now = Instant.now();
+
+        if (sourcePlugins == null || sourcePlugins.isEmpty()) {
+            logger.warn("Ingestion dispatcher has no source plugins registered.");
+            return;
+        }
+
+        logger.info("Dispatching ingestion for {} plugin(s): {}", sourcePlugins.size(),
+            sourcePlugins.stream().map(p -> p.getClass().getSimpleName()).toList());
         
         for (SourcePlugin plugin : sourcePlugins) {
             try {
                 if (acquireLock(plugin.getSourceId())) {
+                    logger.info("Running ingestion for source {}", plugin.getSourceId());
                     runIngestion(plugin, now);
                 }
             } catch (Exception e) {
-                System.err.println("Ingestion failed for " + plugin.getSourceId() + ": " + e.getMessage());
+                logger.error("Ingestion failed for {}: {}", plugin.getSourceId(), e.getMessage());
             } finally {
                 releaseLock(plugin.getSourceId());
             }
         }
     }
+
+    public void runOnce() {
+        dispatchIngestion();
+    }
     
     private boolean acquireLock(String sourceId) {
         try {
             // Postgres advisory lock
-            Integer result = jdbcTemplate.queryForObject(
-                "SELECT pg_try_advisory_lock(hashtext(?))", Integer.class, sourceId);
-            return result != null && result == 1;
+            Boolean result = jdbcTemplate.queryForObject(
+                "SELECT pg_try_advisory_lock(hashtext(?))", Boolean.class, sourceId);
+            boolean acquired = result != null && result;
+            if (!acquired) {
+                logger.warn("Skipped ingestion for {} because advisory lock is held", sourceId);
+            }
+            return acquired;
         } catch (Exception e) {
+            logger.error("Failed to acquire advisory lock for {}: {}", sourceId, e.getMessage());
             return false;
         }
     }
