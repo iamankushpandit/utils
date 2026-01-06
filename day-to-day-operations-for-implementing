@@ -1,0 +1,431 @@
+Below are **ready-to-paste `TODAY_TASK.md` files for Day 1–Day 14**. Each one is intentionally short, scoped, and includes **stop/ask conditions** so Amazon Q free-tier won’t wander or exceed context.
+
+You can copy one day at a time and feed it to the AI along with that day’s required files.
+
+---
+
+```markdown
+# Day 1 — TODAY_TASK.md
+## Goal
+Create a runnable local baseline for Utility Explorer (API + Postgres) with minimal repo scaffolding.
+
+## Files allowed to change/create
+- README.md
+- .env.template
+- docker-compose.yml
+- utility-explorer-api/** (new Spring Boot project scaffolding)
+- PROJECT_STATE.md (create/update)
+- AI_IMPLEMENTATION_RULES.md (if missing, create placeholder and note)
+- ARCHITECTURE.md (if missing, create placeholder and note)
+
+## Requirements
+- docker-compose starts Postgres.
+- Spring Boot API starts locally (even with placeholder routes).
+- Add Spring Boot Actuator and expose /actuator/health.
+- Use env vars for DB config (12-factor).
+
+## Acceptance checks (commands)
+1) docker compose up -d
+2) curl http://localhost:8080/actuator/health  (or configured port)
+Expected: UP (or a clear JSON response)
+
+## Stop and ask if
+- You need to decide a repo structure (monorepo vs two repos).
+- Any dependency choice changes architecture (avoid).
+
+## End-of-day output
+- List files created/changed
+- Exact run commands
+- Update PROJECT_STATE.md (keep under 1 page)
+```
+
+```markdown
+# Day 2 — TODAY_TASK.md
+## Goal
+Add Flyway and core DB schema migrations + minimal seed data (1 source + 1 metric).
+
+## Files allowed to change/create
+- utility-explorer-api/pom.xml
+- utility-explorer-api/src/main/resources/application.yml (or properties)
+- utility-explorer-api/src/main/resources/db/migration/*.sql
+- docker-compose.yml (only if needed)
+- PROJECT_STATE.md
+
+## Requirements
+- Flyway runs on app startup and creates tables:
+  metric, source, source_config, source_run, region, fact_value
+  raw_payload (optional but ok)
+- Seed 1 metric + 1 source via migration.
+- No schema guesswork beyond what is in ARCHITECTURE doc.
+
+## Acceptance checks
+1) docker compose up --build
+2) API logs show Flyway applied successfully
+3) DB contains tables + seed rows
+
+## Stop and ask if
+- You want to change the schema keys beyond what is defined.
+- Unsure about primary key uniqueness for fact_value.
+
+## End-of-day output
+- Migration list and purpose
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 3 — TODAY_TASK.md
+## Goal
+Implement Catalog endpoints: GET /metrics, GET /sources, GET /coverage per OpenAPI.
+
+## Files allowed to change/create
+- utility-explorer-api/src/main/java/** (controllers/services/repos/dtos)
+- utility-explorer-api/src/test/java/** (basic tests)
+- PROJECT_STATE.md
+
+## Requirements
+- Responses must match openapi.yaml exactly for these endpoints.
+- /coverage returns supportedGeoLevels and supportedGranularities (can be derived from metric table initially if needed).
+- Implement ErrorResponse for 404/400.
+
+## Acceptance checks
+- curl /api/v1/metrics returns seeded metric
+- curl /api/v1/sources returns seeded source
+- curl /api/v1/coverage?metricId=...&sourceId=... returns valid JSON
+
+## Stop and ask if
+- Coverage cannot be represented using current schema (don’t invent new tables without approval).
+
+## End-of-day output
+- Endpoint list + sample curl
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 4 — TODAY_TASK.md
+## Goal
+Implement Regions endpoints: search, get region, children.
+
+## Files allowed to change/create
+- utility-explorer-api/src/main/java/**
+- utility-explorer-api/src/main/resources/db/migration/*.sql (seed minimal regions)
+- utility-explorer-api/src/test/java/**
+- PROJECT_STATE.md
+
+## Requirements
+- Seed a small set of regions (at least: US states or a subset).
+- Implement:
+  GET /regions/search?q=
+  GET /regions/{geoLevel}/{geoId}
+  GET /regions/{geoLevel}/{geoId}/children
+- Use DB only; no external geo APIs.
+
+## Acceptance checks
+- /regions/search?q=Kan returns Kansas
+- /regions/STATE/20 returns Kansas
+- children returns empty unless seeded (ok)
+
+## Stop and ask if
+- You want to add new geo levels (ZIP/CBSA). Not allowed without approval.
+
+## End-of-day output
+- Seeded regions summary
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 5 — TODAY_TASK.md
+## Goal
+Implement GET /map (read path) with legend stats and provenance per OpenAPI.
+
+## Files allowed to change/create
+- utility-explorer-api/src/main/java/**
+- utility-explorer-api/src/test/java/**
+- PROJECT_STATE.md
+
+## Requirements
+- /map reads from fact_value.
+- Computes legend min/max; percentiles optional.
+- Returns empty values array if no facts exist.
+- Must not fabricate missing regions.
+
+## Acceptance checks
+- /map returns valid schema even with no data
+- Add a test inserting sample facts and validate response values
+
+## Stop and ask if
+- Unsure whether missing regions should be omitted or returned as null entries (follow OpenAPI; if ambiguous, ask).
+
+## End-of-day output
+- Sample request/response
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 6 — TODAY_TASK.md
+## Goal
+Implement GET /timeseries and GET /export/csv.
+
+## Files allowed to change/create
+- utility-explorer-api/src/main/java/**
+- utility-explorer-api/src/test/java/**
+- PROJECT_STATE.md
+
+## Requirements
+- /timeseries returns sorted points in date range.
+- Each point includes provenance (retrievedAt, optional sourcePublishedAt).
+- /export/csv returns CSV with headers including provenance columns.
+
+## Acceptance checks
+- Insert sample facts; /timeseries returns expected points
+- /export/csv downloads CSV and includes columns: periodStart, periodEnd, value, retrievedAt, sourcePublishedAt
+
+## Stop and ask if
+- Unsure about date range inclusivity (document chosen behavior).
+
+## End-of-day output
+- Example CSV header + sample row
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 7 — TODAY_TASK.md
+## Goal
+Implement GET /status/sources to support Transparency page.
+
+## Files allowed to change/create
+- utility-explorer-api/src/main/java/**
+- utility-explorer-api/src/test/java/**
+- PROJECT_STATE.md
+
+## Requirements
+- Return enabled flag + schedule cron + timezone per source_config.
+- Include lastRun summary and lastSuccessAt if any runs exist.
+- nextRunAt can be computed simply from cron; if hard, return null and note in PROJECT_STATE.
+
+## Acceptance checks
+- With no runs, endpoint still returns sources with null lastRun
+- After inserting a run row, endpoint returns lastRun
+
+## Stop and ask if
+- Cron parsing requires a new dependency (ask before adding).
+
+## End-of-day output
+- Status payload example
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 8 — TODAY_TASK.md
+## Goal
+Add ingestion framework skeleton (dispatcher + locking + plugin interface) with a mock source plugin.
+
+## Files allowed to change/create
+- utility-explorer-api/src/main/java/**
+- utility-explorer-api/src/test/java/**
+- PROJECT_STATE.md
+
+## Requirements
+- Dispatcher runs on a fixed tick (env var INGESTION_TICK_SECONDS).
+- Per-source lock prevents concurrent runs.
+- Mock plugin writes deterministic facts and logs a source_run.
+- Must be idempotent (re-run doesn’t create duplicate fact_value rows).
+
+## Acceptance checks
+- Enable ingestion and confirm source_run rows created
+- Run twice → no duplicates in fact_value PK
+
+## Stop and ask if
+- Locking strategy is unclear (choose Postgres advisory lock if available; if uncertain, ask).
+
+## End-of-day output
+- How to enable/disable ingestion
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 9 — TODAY_TASK.md
+## Goal
+Source intake documentation + wiring (NO real ingestion if terms/cadence unknown).
+
+## Files allowed to change/create
+- SOURCES.md (new)
+- utility-explorer-api/src/main/resources/db/migration/*.sql (seed new source metadata only)
+- PROJECT_STATE.md
+
+## Requirements
+- Create SOURCES.md listing at least 1–2 intended sources with:
+  doc link, terms link, cadence, geo levels, granularity, units.
+- Only seed source metadata + config; do NOT write ingestion code unless fully documented.
+
+## Acceptance checks
+- /sources includes the new source(s)
+- /status/sources shows their enabled/config state
+
+## Stop and ask if
+- Terms of use are unclear or redistrib is questionable.
+
+## End-of-day output
+- SOURCES.md summary
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 10 — TODAY_TASK.md (UI)
+## Goal
+Create Vue UI shell with routes: / (Map Explorer placeholder) and /transparency (static + status widget).
+
+## Files allowed to change/create
+- utility-explorer-ui/** (new Vue project scaffolding)
+- utility-explorer-ui/.env.template
+- utility-explorer-ui/README.md
+- PROJECT_STATE.md
+
+## Requirements
+- UI runs locally.
+- /transparency page calls /api/v1/status/sources and renders a simple table.
+- No map yet beyond placeholder panel.
+
+## Acceptance checks
+- npm run dev works
+- Transparency page renders and shows status list
+
+## Stop and ask if
+- Choosing mapping library (not today).
+
+## End-of-day output
+- Run commands
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 11 — TODAY_TASK.md (UI Map)
+## Goal
+Implement boundary rendering and choropleth basics (no fancy interactions).
+
+## Files allowed to change/create
+- utility-explorer-ui/src/**
+- PROJECT_STATE.md
+
+## Requirements
+- Load static boundary files (TopoJSON/GeoJSON) from local assets.
+- Render STATE map boundaries.
+- Fetch /api/v1/map and color states when values exist.
+- If no values, show boundaries + “No data available”.
+
+## Acceptance checks
+- Boundaries render
+- With seeded API facts, at least one region is colored
+
+## Stop and ask if
+- Unsure which boundary format to standardize (choose one and document).
+
+## End-of-day output
+- What file format used and where stored
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 12 — TODAY_TASK.md (Drawer + Chart + Export)
+## Goal
+Implement region click → drawer + time series chart + export CSV.
+
+## Files allowed to change/create
+- utility-explorer-ui/src/**
+- PROJECT_STATE.md
+
+## Requirements
+- Click a region → open drawer with region name + current value + retrievedAt.
+- Drawer fetches /timeseries and renders a line chart.
+- Export button downloads CSV from /export/csv.
+- Provenance must be visible in drawer.
+
+## Acceptance checks
+- Click works
+- Chart renders when data exists
+- Export downloads file
+
+## Stop and ask if
+- Chart library choice is unclear (pick minimal and document; avoid big dependencies).
+
+## End-of-day output
+- UX screenshot notes (text description is fine)
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 13 — TODAY_TASK.md (Copilot v1)
+## Goal
+Implement read-only Copilot endpoint and UI panel (minimal).
+
+## Files allowed to change/create
+- utility-explorer-api/src/main/java/**
+- utility-explorer-api/src/test/java/**
+- utility-explorer-ui/src/**
+- PROJECT_STATE.md
+
+## Requirements
+- /copilot/query requires X-API-Key.
+- Implement QuerySpec internally and validate strictly.
+- Implement one query type: INTERSECTION using latest common period (only using existing data).
+- UI panel: input question, display result table + citations, “highlight on map” optional.
+
+## Acceptance checks
+- Without API key -> 401
+- With key and data -> OK response
+- With missing data -> INSUFFICIENT_DATA
+
+## Stop and ask if
+- QuerySpec semantics are ambiguous (ask before expanding).
+
+## End-of-day output
+- Example question + response
+- Update PROJECT_STATE.md
+```
+
+```markdown
+# Day 14 — TODAY_TASK.md (Hardening + Docs)
+## Goal
+Polish: tests, docs, demo walkthrough, and guardrail verification.
+
+## Files allowed to change/create
+- README.md
+- DEMO.md
+- utility-explorer-api/src/test/java/**
+- utility-explorer-ui/** (minor polish only)
+- PROJECT_STATE.md
+
+## Requirements
+- Add integration tests for key endpoints: /metrics, /sources, /map, /timeseries, /status.
+- Add a DEMO.md with exact steps to reproduce:
+  map view, drilldown, timeseries, export, transparency status.
+- Verify “no invention” principle in UI and API (document it).
+
+## Acceptance checks
+- One-command local run path documented
+- Tests pass
+
+## Stop and ask if
+- CI/CD setup is needed (out of scope for local-first MVP days).
+
+## End-of-day output
+- DEMO.md contents summary
+- Update PROJECT_STATE.md
+```
+
+---
+
+## How to use this with Amazon Q (free tier)
+
+Each day, paste **only**:
+
+1. `PROJECT_STATE.md` (short)
+2. That day’s `TODAY_TASK.md`
+3. The exact files it needs to edit (or a small directory tree + the specific files)
+
+At the end of each day, make it output an updated `PROJECT_STATE.md`.
+
+If you want, I can also give you:
+
+* a `PROJECT_STATE.md` template pre-filled for Day 1,
+* a `SOURCES.md` template,
+* a `DEMO.md` template (so Day 14 is trivial).
