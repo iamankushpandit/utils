@@ -33,11 +33,6 @@ export const apiService = {
     return response.data
   },
   
-  async getTimeSeries(params) {
-    const response = await api.get('/timeseries', { params })
-    return response.data
-  },
-  
   async exportCsv(params) {
     const response = await api.get('/export/csv', { 
       params,
