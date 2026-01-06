@@ -394,3 +394,69 @@ class TimeSeriesPoint {
     public String getSourcePublishedAt() { return sourcePublishedAt; }
     public void setSourcePublishedAt(String sourcePublishedAt) { this.sourcePublishedAt = sourcePublishedAt; }
 }
+
+class SourceStatusResponse {
+    private String sourceId;
+    private Boolean enabled;
+    private String scheduleCron;
+    private String timezone;
+    private LastRunInfo lastRun;
+    private String lastSuccessAt;
+    
+    public SourceStatusResponse() {}
+    
+    public String getSourceId() { return sourceId; }
+    public void setSourceId(String sourceId) { this.sourceId = sourceId; }
+    
+    public Boolean getEnabled() { return enabled; }
+    public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+    
+    public String getScheduleCron() { return scheduleCron; }
+    public void setScheduleCron(String scheduleCron) { this.scheduleCron = scheduleCron; }
+    
+    public String getTimezone() { return timezone; }
+    public void setTimezone(String timezone) { this.timezone = timezone; }
+    
+    public LastRunInfo getLastRun() { return lastRun; }
+    public void setLastRun(LastRunInfo lastRun) { this.lastRun = lastRun; }
+    
+    public String getLastSuccessAt() { return lastSuccessAt; }
+    public void setLastSuccessAt(String lastSuccessAt) { this.lastSuccessAt = lastSuccessAt; }
+}
+
+class LastRunInfo {
+    private String runId;
+    private String status;
+    private String startedAt;
+    private String endedAt;
+    private Integer rowsUpserted;
+    private String errorSummary;
+    
+    public LastRunInfo(String runId, String status, String startedAt, String endedAt, 
+                      Integer rowsUpserted, String errorSummary) {
+        this.runId = runId;
+        this.status = status;
+        this.startedAt = startedAt;
+        this.endedAt = endedAt;
+        this.rowsUpserted = rowsUpserted;
+        this.errorSummary = errorSummary;
+    }
+    
+    public String getRunId() { return runId; }
+    public void setRunId(String runId) { this.runId = runId; }
+    
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    
+    public String getStartedAt() { return startedAt; }
+    public void setStartedAt(String startedAt) { this.startedAt = startedAt; }
+    
+    public String getEndedAt() { return endedAt; }
+    public void setEndedAt(String endedAt) { this.endedAt = endedAt; }
+    
+    public Integer getRowsUpserted() { return rowsUpserted; }
+    public void setRowsUpserted(Integer rowsUpserted) { this.rowsUpserted = rowsUpserted; }
+    
+    public String getErrorSummary() { return errorSummary; }
+    public void setErrorSummary(String errorSummary) { this.errorSummary = errorSummary; }
+}

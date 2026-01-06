@@ -1,21 +1,22 @@
 # PROJECT_STATE.md — Utility Explorer
 
 ## Current status (as of 2026-01-06)
-- Phase/Day: Day 6 (COMPLETED)
+- Phase/Day: Day 7 (COMPLETED)
 - Repo layout: Monorepo structure
-- Local run: Docker Compose + Spring Boot + Flyway + All core read APIs ready
+- Local run: Docker Compose + Spring Boot + Flyway + All read APIs + Status ready
 
 ## What is built
 - Memory Bank documentation structure
 - Spring Boot API with health endpoint
 - Docker Compose setup with Postgres
 - Flyway migrations with core schema
-- Seed data: 1 metric + 1 source + 5 US states + timeseries facts
+- Seed data: 1 metric + 1 source + 5 US states + timeseries facts + sample runs
 - Catalog endpoints: /metrics, /sources, /coverage
 - Region endpoints: /regions/search, /regions/{geoLevel}/{geoId}, /regions/{geoLevel}/{geoId}/children
 - Map endpoint: /map with legend stats and provenance
 - Timeseries endpoint: /timeseries with sorted points and provenance
 - Export endpoint: /export/csv with provenance columns
+- Status endpoint: /status/sources with run history and configuration
 
 ## What is agreed (non-negotiable)
 - No invented data (no forecasting/interpolation/imputation)
@@ -41,7 +42,7 @@
 - Cron parsing dependency for nextRunAt (return null initially)
 
 ## Next planned step
-- Day 7: Implement GET /status/sources to support Transparency page
+- Day 8: Add ingestion framework skeleton (dispatcher + locking + plugin interface) with mock source plugin
 
 ## Validation commands (target)
 - docker compose up -d
