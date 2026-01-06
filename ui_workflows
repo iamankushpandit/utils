@@ -1,0 +1,294 @@
+Below are **wire (low-fidelity) UI diagrams** and **workflow paths** for the key experiences. These are intentionally simple so you can translate them into Vue components later.
+
+---
+
+## 1) Global App Shell
+
+```
++----------------------------------------------------------------------------------+
+| Utility Explorer                                   [Transparency] [Status] [Git] |
++----------------------------------------------------------------------------------+
+| [Metric ▼] [Source ▼] [Geo Level ▼] [Period ▼]  [Compare Sources □]  [Copilot ⌄] |
++----------------------------------------------------------------------------------+
+|                                                                                  |
+|   (Main Content Area: Map / Results)                                              |
+|                                                                                  |
++----------------------------------------------------------------------------------+
+| Footer:  Data: <Source Name> | Retrieved: <timestamp> | Terms | Contact          |
++----------------------------------------------------------------------------------+
+```
+
+---
+
+## 2) Workflow A — Map Explore (default landing)
+
+### Screen: Map Explorer (US view)
+
+```
++----------------------------------------------------------------------------------+
+| Controls: Metric | Source | Geo Level | Period | Compare Sources | Search         |
++----------------------------------------------------------------------------------+
+| +------------------------------+   +-------------------------------------------+ |
+| |  MAP (choropleth)            |   |  Details Drawer (collapsed by default)    | |
+| |  - States colored            |   |  Click a region to view details           | |
+| |  - Hover tooltip             |   |                                           | |
+| |                              |   |                                           | |
+| +------------------------------+   +-------------------------------------------+ |
+| Legend: green(low) -> red(high)   Provenance: RetrievedAt | PublishedAt (if any) |
++----------------------------------------------------------------------------------+
+```
+
+### User flow
+
+```
+Open app
+  -> Choose Metric
+  -> Choose Source
+  -> Choose Period
+  -> Map renders values + legend + retrieved timestamp
+  -> Hover region -> tooltip
+  -> Click region -> opens drawer (Workflow B)
+```
+
+---
+
+## 3) Workflow B — Drilldown + Region Details + History
+
+### Screen: Region clicked (drawer opens)
+
+```
++----------------------------------------------------------------------------------+
+| Controls …                                                                        |
++----------------------------------------------------------------------------------+
+| +------------------------------+   +-------------------------------------------+ |
+| | MAP                           |   |  Region Drawer                           | |
+| | (State choropleth)            |   |-------------------------------------------| |
+| |                                |   |  Kansas (STATE: 20)                      | |
+| |                                |   |  Breadcrumb: US > Kansas                 | |
+| +------------------------------+   |-------------------------------------------| |
+| Legend + provenance              |   |  Current Value Card                      | |
+|                                  |   |  14.6 cents/kWh                          | |
+|                                  |   |  Period: Dec 2025                        | |
+|                                  |   |  Retrieved: Jan 6, 2026 08:15 CST        | |
+|                                  |   |  Source: EIA (Terms link)                | |
+|                                  |   |-------------------------------------------| |
+|                                  |   |  [Drill down to Counties ▸]              | |
+|                                  |   |-------------------------------------------| |
+|                                  |   |  History Chart (time series)             | |
+|                                  |   |  (line chart)                            | |
+|                                  |   |-------------------------------------------| |
+|                                  |   |  [Export CSV] [Copy link]                | |
+|                                  |   +-------------------------------------------+ |
++----------------------------------------------------------------------------------+
+```
+
+### Drilldown action paths
+
+```
+From drawer:
+  [Drill down to Counties]
+    -> Map changes to COUNTY boundaries within selected state
+    -> If data exists at COUNTY for chosen metric/source:
+         county map colors show
+       else:
+         county map shows boundaries but no fill + “No data at COUNTY level”
+```
+
+---
+
+## 4) Workflow C — “No Data at this Geography” (Integrity UX)
+
+### Screen: User drills deeper but source doesn’t support it
+
+```
++----------------------------------------------------------------------------------+
+| Metric: Electricity Price (STATE only) | Source: EIA | Geo Level: COUNTY          |
++----------------------------------------------------------------------------------+
+| +------------------------------+   +-------------------------------------------+ |
+| | MAP (COUNTY boundaries)       |   |  Notice                                 | |
+| | (no fill colors)              |   |-------------------------------------------| |
+| |                                |   |  No data available at COUNTY level       | |
+| |                                |   |  for this metric/source.                 | |
+| +------------------------------+   |                                           | |
+| Legend: disabled                |   |  Options:                                | |
+| Provenance shown for last run   |   |  [Switch to STATE view]                   | |
+|                                 |   |  [Choose a metric with COUNTY coverage]  | |
+|                                 |   +-------------------------------------------+ |
++----------------------------------------------------------------------------------+
+```
+
+**Key rule:** boundaries still render; **no fabricated values**.
+
+---
+
+## 5) Workflow D — Compare Sources (same metric, multiple sources)
+
+### Screen: Compare mode enabled
+
+```
++----------------------------------------------------------------------------------+
+| Metric: Broadband Availability | Compare Sources: [✓] | Period: Latest Common     |
++----------------------------------------------------------------------------------+
+| +------------------------------+   +-------------------------------------------+ |
+| | MAP                           |   | Compare Panel                            | |
+| | Toggle source overlay:        |   |-------------------------------------------| |
+| | [Source A] [Source B]         |   | Source A: RetrievedAt, PublishedAt        | |
+| |                                |   | Source B: RetrievedAt, PublishedAt        | |
+| +------------------------------+   |-------------------------------------------| |
+| Legend updates per source       |   | Differences note (definitions/coverage)   | |
+|                                 |   | (No blending / no averaging)              | |
+|                                 |   +-------------------------------------------+ |
++----------------------------------------------------------------------------------+
+```
+
+### Compare flow
+
+```
+Enable Compare Sources
+  -> UI shows source tabs or split view
+  -> user switches source view
+  -> chart can overlay multiple series (labeled)
+  -> show “values may differ across sources due to methodology”
+```
+
+---
+
+## 6) Workflow E — Cross-layer “Scenario” (high electricity + low broadband)
+
+This is a decision-maker friendly view that’s still transparent.
+
+### Screen: Scenario builder (still map-first)
+
+```
++----------------------------------------------------------------------------------+
+| Scenario: [Electricity Price] HIGH  AND  [Broadband Served %] LOW   Period: Auto |
++----------------------------------------------------------------------------------+
+| +------------------------------+   +-------------------------------------------+ |
+| | MAP (STATE choropleth)        |   | Scenario Rules (transparent)              | |
+| | Highlight results only         |   |-------------------------------------------| |
+| | (e.g., outline states)         |   | Electricity: top 25% threshold = 22.1     | |
+| |                                |   | Broadband: bottom 25% threshold = 68%     | |
+| +------------------------------+   | Period: Latest common = Dec 2025           | |
+| Legend: “Scenario match”        |   | Included: 12 states (all metrics present) | |
+|                                 |   | Missing data: 3 states excluded           | |
+|                                 |   | [View table] [Ask Copilot]                | |
+|                                 |   +-------------------------------------------+ |
++----------------------------------------------------------------------------------+
+```
+
+---
+
+## 7) Workflow F — Copilot (read-only) + highlight on map
+
+### Screen: Copilot panel
+
+```
++----------------------------------------------------------------------------------+
+| Copilot (Read-only)                                                             X |
+| Ask: “Show states with high electricity price and low broadband availability”     |
+| [Submit]                                                                          |
+|----------------------------------------------------------------------------------|
+| Result Summary: Latest common period: Dec 2025                                    |
+| Table:                                                                            |
+|  State | Electricity (c/kWh) | Broadband % | Sources used                          |
+|  ...                                                                            ...|
+|----------------------------------------------------------------------------------|
+| Citations:                                                                        |
+|  - EIA Retrieved: Jan 6, 2026 | Terms link                                         |
+|  - FCC Retrieved: Jan 3, 2026 | Terms link                                         |
+| Notes:                                                                            |
+|  - No values estimated. States missing broadband data excluded.                   |
+|----------------------------------------------------------------------------------|
+| [Highlight on map]  [Export CSV]                                                  |
++----------------------------------------------------------------------------------+
+```
+
+### Copilot flow
+
+```
+User opens Copilot
+  -> asks question
+  -> system returns table + citations
+  -> user clicks “Highlight on map”
+  -> map updates to show returned regions highlighted
+```
+
+---
+
+## 8) Workflow G — Transparency Page (static ideology + dynamic proof)
+
+### Screen: /transparency
+
+```
++----------------------------------------------------------------------------------+
+| Transparency & Methodology                                                        |
++----------------------------------------------------------------------------------+
+| Principles                                                                        |
+|  - Free public data only                                                          |
+|  - No ads                                                                          |
+|  - No forecasting or gap-filling                                                  |
+|  - No silent blending of sources                                                  |
+|  - Provenance on every number                                                     |
+|----------------------------------------------------------------------------------|
+| Coverage & Definitions                                                            |
+|  - “City” = Census Place (definition link)                                        |
+|  - Geography varies by metric/source                                              |
+|----------------------------------------------------------------------------------|
+| Sources                                                                           |
+|  - EIA: metrics…, terms link…                                                     |
+|  - FCC: metrics…, terms link…                                                     |
+|----------------------------------------------------------------------------------|
+| Live Data Status (dynamic widget)                                                 |
+|  Source | Cadence | Last Success | Last Attempt | Status | Notes                  |
+|----------------------------------------------------------------------------------|
+| Contact / Report an issue                                                        |
++----------------------------------------------------------------------------------+
+```
+
+---
+
+## 9) Workflow H — Data Status Page (ops transparency)
+
+### Screen: /status
+
+```
++----------------------------------------------------------------------------------+
+| Data Status                                                                        |
++----------------------------------------------------------------------------------+
+| Source Runs                                                                        |
+|  - EIA:  Last Success: ...  Next Run: ...  Failures(7d): ...                      |
+|  - FCC:  ...                                                                         |
+|----------------------------------------------------------------------------------|
+| Recent Runs (table)                                                                |
+|  Time | Source | Status | Rows Upserted | Error summary                           |
+|----------------------------------------------------------------------------------|
+| Known Issues / Degradations (optional)                                             |
++----------------------------------------------------------------------------------+
+```
+
+---
+
+## 10) Workflow I — CSV Export (region + range)
+
+### Screen: Export action
+
+```
+From Region Drawer or Copilot result:
+  [Export CSV] -> modal confirmation
+
++-----------------------------+
+| Export CSV                  |
+| Metric: ...                 |
+| Source: ...                 |
+| Region: ...                 |
+| Range: 2020-01 to 2025-12   |
+| Include provenance: ✓       |
+| [Download] [Cancel]         |
++-----------------------------+
+```
+
+---
+
+### If you want one more useful artifact
+
+I can also produce a **component hierarchy diagram** (Vue components + state flow) and a **screen-to-endpoint mapping** (each UI action → which API call(s) happen).
