@@ -179,3 +179,144 @@ class ErrorResponse {
     public String getTimestamp() { return timestamp; }
     public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
 }
+
+class MapResponse {
+    private MetricInfo metric;
+    private SourceInfo source;
+    private String geoLevel;
+    private String parent;
+    private PeriodInfo period;
+    private String retrievedAt;
+    private String sourcePublishedAt;
+    private LegendStats legend;
+    private List<MapValue> values;
+    private List<String> notes;
+    
+    public MapResponse() {}
+    
+    // Getters and setters
+    public MetricInfo getMetric() { return metric; }
+    public void setMetric(MetricInfo metric) { this.metric = metric; }
+    
+    public SourceInfo getSource() { return source; }
+    public void setSource(SourceInfo source) { this.source = source; }
+    
+    public String getGeoLevel() { return geoLevel; }
+    public void setGeoLevel(String geoLevel) { this.geoLevel = geoLevel; }
+    
+    public String getParent() { return parent; }
+    public void setParent(String parent) { this.parent = parent; }
+    
+    public PeriodInfo getPeriod() { return period; }
+    public void setPeriod(PeriodInfo period) { this.period = period; }
+    
+    public String getRetrievedAt() { return retrievedAt; }
+    public void setRetrievedAt(String retrievedAt) { this.retrievedAt = retrievedAt; }
+    
+    public String getSourcePublishedAt() { return sourcePublishedAt; }
+    public void setSourcePublishedAt(String sourcePublishedAt) { this.sourcePublishedAt = sourcePublishedAt; }
+    
+    public LegendStats getLegend() { return legend; }
+    public void setLegend(LegendStats legend) { this.legend = legend; }
+    
+    public List<MapValue> getValues() { return values; }
+    public void setValues(List<MapValue> values) { this.values = values; }
+    
+    public List<String> getNotes() { return notes; }
+    public void setNotes(List<String> notes) { this.notes = notes; }
+}
+
+class MetricInfo {
+    private String metricId;
+    private String unit;
+    
+    public MetricInfo(String metricId, String unit) {
+        this.metricId = metricId;
+        this.unit = unit;
+    }
+    
+    public String getMetricId() { return metricId; }
+    public void setMetricId(String metricId) { this.metricId = metricId; }
+    
+    public String getUnit() { return unit; }
+    public void setUnit(String unit) { this.unit = unit; }
+}
+
+class SourceInfo {
+    private String sourceId;
+    private String name;
+    private String termsUrl;
+    
+    public SourceInfo(String sourceId, String name, String termsUrl) {
+        this.sourceId = sourceId;
+        this.name = name;
+        this.termsUrl = termsUrl;
+    }
+    
+    public String getSourceId() { return sourceId; }
+    public void setSourceId(String sourceId) { this.sourceId = sourceId; }
+    
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    
+    public String getTermsUrl() { return termsUrl; }
+    public void setTermsUrl(String termsUrl) { this.termsUrl = termsUrl; }
+}
+
+class PeriodInfo {
+    private String start;
+    private String end;
+    
+    public PeriodInfo(String start, String end) {
+        this.start = start;
+        this.end = end;
+    }
+    
+    public String getStart() { return start; }
+    public void setStart(String start) { this.start = start; }
+    
+    public String getEnd() { return end; }
+    public void setEnd(String end) { this.end = end; }
+}
+
+class LegendStats {
+    private Double min;
+    private Double max;
+    
+    public LegendStats(Double min, Double max) {
+        this.min = min;
+        this.max = max;
+    }
+    
+    public Double getMin() { return min; }
+    public void setMin(Double min) { this.min = min; }
+    
+    public Double getMax() { return max; }
+    public void setMax(Double max) { this.max = max; }
+}
+
+class MapValue {
+    private String geoId;
+    private String name;
+    private Double value;
+    private String retrievedAt;
+    
+    public MapValue(String geoId, String name, Double value, String retrievedAt) {
+        this.geoId = geoId;
+        this.name = name;
+        this.value = value;
+        this.retrievedAt = retrievedAt;
+    }
+    
+    public String getGeoId() { return geoId; }
+    public void setGeoId(String geoId) { this.geoId = geoId; }
+    
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    
+    public Double getValue() { return value; }
+    public void setValue(Double value) { this.value = value; }
+    
+    public String getRetrievedAt() { return retrievedAt; }
+    public void setRetrievedAt(String retrievedAt) { this.retrievedAt = retrievedAt; }
+}
