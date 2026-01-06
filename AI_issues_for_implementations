@@ -1,0 +1,268 @@
+If an AI is implementing the *entire* project end-to-end, the biggest risk isn’t coding speed—it’s **consistency, drift, and silent wrong assumptions**. Here are the additional things you should explicitly design for.
+
+---
+
+## 1) A “Single Source of Truth” hierarchy
+
+AI gets confused when multiple docs disagree.
+
+Set a rule:
+
+1. **OpenAPI** is the source of truth for API shapes.
+2. **DB migrations** are source of truth for schema.
+3. **Architecture doc** is source of truth for patterns (plugin design, provenance).
+4. **UI wireflows** are source of truth for screens and behaviors.
+
+Also add: “If any two sources conflict, AI must stop and ask.”
+
+---
+
+## 2) A strict “No silent scope expansion” policy
+
+AI will naturally add “nice-to-haves” (auth, caching, admin screens, new endpoints).
+
+Rules:
+
+* AI may not add new endpoints, tables, or screens unless listed in requirements.
+* AI may not pull new libraries or external services unless explicitly approved.
+* Any “optional” feature must be behind a feature flag and documented.
+
+---
+
+## 3) A deterministic work plan with checkpoints
+
+AI needs hard checkpoints to avoid wandering.
+
+Example structure:
+
+* Phase 0: repo scaffolding + Compose + env templates
+* Phase 1: schema + Flyway + seed metric/source tables
+* Phase 2: map + timeseries endpoints (return provenance)
+* Phase 3: UI map + drawer + chart + status page
+* Phase 4: ingestion framework + one source plugin
+* Phase 5: Copilot QuerySpec validator + 1 query type
+* Phase 6: hardening + docs + polish
+
+**Gate rule:** AI cannot start Phase N+1 until Phase N validation checks pass.
+
+---
+
+## 4) “Proof-of-correctness” artifacts, not just code
+
+AI can ship code that compiles but is wrong.
+
+Require these artifacts for each major feature:
+
+* **Example request/response** saved in `/docs/examples/`
+* **Golden test datasets** (tiny fixtures) with expected outputs
+* **Contract tests** verifying OpenAPI schema compliance
+* **Idempotency test** for ingestion (same input twice ≠ duplicates)
+
+---
+
+## 5) AI-safe branching + commit discipline
+
+AI should commit like a careful developer.
+
+Rules:
+
+* One branch per phase (or per feature).
+* Each commit must contain:
+
+  * what changed
+  * why
+  * how to validate locally
+* Avoid huge PRs; keep changes reviewable.
+* Always update docs with code changes.
+
+---
+
+## 6) Strong test harness (AI’s safety net)
+
+If you want AI autonomy, you need automated checks.
+
+Minimum required:
+
+* Backend: unit + integration tests (Testcontainers Postgres)
+* UI: basic e2e smoke tests (Playwright or Cypress)
+* Linting + formatting in CI
+* “OpenAPI drift” check:
+
+  * ensure controllers match OpenAPI (or generate stubs)
+* Migration drift check:
+
+  * ensure schema = migrations (Flyway validate)
+
+**Rule:** AI cannot merge if CI fails.
+
+---
+
+## 7) Strict data-source onboarding workflow (prevents hallucinated sources)
+
+AI tends to “assume” a dataset has county-level data, etc.
+
+Create a `SOURCE_INTAKE_TEMPLATE.md` that must be completed before writing code:
+
+* official documentation link
+* licensing/terms
+* geo levels supported
+* time granularity
+* units
+* update cadence
+* change detection mechanism
+* sample payload snippet
+* mapping into `metric` + `fact_value`
+
+If any of those are missing, AI must stop.
+
+---
+
+## 8) Known “danger zones” where AI makes mistakes
+
+Call these out explicitly:
+
+### Geography
+
+* City definitions vary wildly. Must stick to “Place” unless approved.
+
+### Time
+
+* “Latest” ≠ “current month”. Must respect source period.
+
+### Units
+
+* cents vs dollars, kWh vs MWh, percentages vs basis points.
+
+### Aggregation
+
+* AI may aggregate to make county values from state values (forbidden).
+
+### Visualization
+
+* AI may “fill gaps” for a prettier map (forbidden).
+
+---
+
+## 9) Runtime safety and “kill switches”
+
+AI might accidentally enable expensive behaviors (e.g., frequent jobs).
+
+Add config kill switches:
+
+* `INGESTION_ENABLED=false`
+* `COPILOT_ENABLED=false`
+* `ADS_ENABLED=false`
+* `EXPORTS_ENABLED=true/false`
+* per-source `enabled=false` in DB
+
+Also define sane limits:
+
+* max rows per query
+* max time range for timeseries by plan (even if free now)
+* request timeouts for ingestion fetches
+
+---
+
+## 10) Dependency governance (keeps the project stable)
+
+AI loves adding libraries.
+
+Rules:
+
+* Only add dependencies that are:
+
+  * widely used
+  * mature
+  * justified in docs
+* Any new dependency requires:
+
+  * why it’s needed
+  * alternatives considered
+  * security/maintenance considerations
+
+---
+
+## 11) Prompt/Context management for AI implementers
+
+If the AI is doing everything, you need a “continuation protocol.”
+
+Require:
+
+* A `PROJECT_STATE.md` that is updated every phase:
+
+  * current architecture decisions
+  * endpoints complete/incomplete
+  * migrations applied
+  * known TODOs
+* A `NEXT_STEPS.md` with the immediate next tasks.
+
+This reduces reliance on conversation memory.
+
+---
+
+## 12) Guardrails against “convenience shortcuts”
+
+AI may:
+
+* hardcode URLs
+* inline credentials
+* write non-idempotent jobs
+* skip provenance fields
+
+So add automated rules:
+
+* scan for secrets
+* block merges if `.env` appears
+* schema tests verifying every fact has `retrieved_at`
+* endpoint tests verifying provenance exists in response
+
+---
+
+## 13) Human review points (even if AI implements everything)
+
+Even with AI autonomy, define a few “human signoff” checkpoints:
+
+* Metric catalog definitions (product decisions)
+* Source terms/licensing approval
+* “Latest common period” policy
+* Copilot strictness policy (partial results yes/no)
+* Ads/billing changes
+
+Everything else AI can do.
+
+---
+
+## 14) AI-specific operational limitations
+
+If AI is running in a constrained environment:
+
+* it may not actually execute the system end-to-end
+* it may hallucinate that tests passed
+
+So mandate:
+
+* CI must run in a real environment and publish results
+* no “trust me it works” claims accepted without logs
+
+---
+
+## 15) A crisp “when to stop” list for AI
+
+AI must stop if:
+
+* requirements conflict
+* source terms are unclear
+* missing proof for geo/time granularity
+* OpenAPI mismatch is discovered
+* it needs to invent data to make UI nicer
+* it cannot keep all relevant docs in context
+
+When stopping, it must output:
+
+* current state summary
+* list of decisions needed
+* smallest next step after decisions
+
+---
+
+If you want, I can convert this into a **single “AI Implementer Contract”** doc you can place in the repo root (like `AI_IMPLEMENTATION_RULES.md`), plus a `SOURCE_INTAKE_TEMPLATE.md` and `PROJECT_STATE.md` template that the AI must keep updated.
