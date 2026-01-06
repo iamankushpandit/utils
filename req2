@@ -1,0 +1,862 @@
+````markdown
+# Utility Explorer — Architecture + Cloud Design + Low-Level Design (Single File)
+
+> **Purpose:** A map-first, transparency-first dashboard and API that visualizes **free public utility-related datasets** (electricity, broadband, water, wastewater) with provenance.  
+> **Key constraints:** **No ads. No forecasting. No imputation. No hidden blending.** If data isn’t available at a geography/time, we show **“No data available.”**  
+> **Tech:** Vue.js UI + Java Spring Boot API + Postgres + periodic ingestion jobs with **source-specific cadence** + read-only Copilot for cross-layer questions.
+
+---
+
+## 0) Non-Negotiables (Product Integrity Contract)
+
+1. **Free public data only** (no paid datasets for MVP).
+2. **No ads, affiliate links, sponsored rankings, or trackers by default.**
+3. **No data invention**:
+   - No forecasting, smoothing, estimation, or imputation.
+   - No “effective rates” derived from tariff assumptions.
+4. **No silent blending**:
+   - If multiple sources exist for the same metric, show each separately.
+5. **Provenance everywhere**:
+   - Every returned value includes `retrieved_at`.
+   - If provided by source, also include `source_published_at`.
+   - Every response includes `source_id` + a link to terms/attribution.
+
+**Allowed transformation (only if transparent):**
+- Aggregation needed to present a map view (e.g., counting facility records per county), but it must:
+  - be clearly labeled as an aggregation,
+  - be reproducible and documented (grouping rule + query),
+  - never fabricate missing values.
+
+---
+
+## 1) High-Level Architecture
+
+### 1.1 Logical Components
+
+- **Vue UI**
+  - Map (choropleth) + drilldown boundaries + timeseries chart
+  - Transparency page (static ideology) + dynamic data status widget
+  - Read-only Copilot query bar
+
+- **Spring Boot API**
+  - Serves metrics catalog, sources, coverage, map data, time series, exports
+  - Runs ingestion dispatcher + source plugins
+  - Read-only Copilot (QuerySpec → validated → SQL → results)
+
+- **Postgres**
+  - Facts, provenance, source runs, raw payload references, geo metadata
+
+- **Boundary Assets**
+  - Pre-built TopoJSON/GeoJSON for states/counties/places (served statically)
+
+### 1.2 Diagram
+
+```text
++-------------------+       HTTPS       +-------------------------+
+|   Vue Frontend    | <---------------> |    Spring Boot API       |
+|  (static hosting) |                   |  - /map /timeseries      |
+|                   |                   |  - /metrics /sources     |
+|                   |                   |  - /copilot (read-only)  |
++---------+---------+                   |  - ingestion dispatcher  |
+          |                             +-----------+-------------+
+          |                                         |
+          |                                         | JDBC
+          |                                         |
+          |                             +-----------v-------------+
+          |                             |        Postgres         |
+          |                             | facts + geo + provenance|
+          |                             +-----------+-------------+
+          |
+          | (static boundary files: TopoJSON/GeoJSON)
+          v
++-------------------+
+|  Boundary Assets  |
++-------------------+
+````
+
+---
+
+## 2) Cloud Design (Local-First, Cheap-First, Cloud-Ready)
+
+### 2.1 Local Development (Required)
+
+Run everything locally with Docker Compose:
+
+* `postgres`
+* `api` (Spring Boot)
+* UI can run as:
+
+  * `npm run dev` (fast dev), or
+  * containerized for prod-like testing
+
+**Reason:** Local-first supports fast iteration and enforces 12-factor config early.
+
+### 2.2 Cheapest Reliable Hosting (Recommended MVP)
+
+**Static UI + single VM**:
+
+* Vue UI on a static host (or nginx on the same VM)
+* Spring Boot API + Postgres on a single small VPS
+* Nightly `pg_dump` backups
+
+**Reason:** Lowest cost + simplest ops + great portfolio signal (portable, not AWS-locked).
+
+### 2.3 AWS-Ready Path (Optional Later)
+
+* UI: S3 + CloudFront (or equivalent)
+* API: ECS/Fargate or single EC2
+* DB: RDS Postgres
+* Ingestion: separate “worker” task/container
+
+**Reason:** Architecture avoids AWS coupling; can move later without rewrites.
+
+---
+
+## 3) Key Design Decisions (and Why)
+
+### D1: **Map-first UI + Read-only Copilot**
+
+* Decision makers trust visuals; map answers “where” quickly.
+* Copilot adds “ask questions” without becoming a source of truth.
+
+### D2: **Canonical Geography IDs**
+
+* **STATE** = state FIPS (2-digit)
+* **COUNTY** = county FIPS (5-digit)
+* **PLACE** (“city”) = Census Place GEOID (state+place)
+  **Reason:** Standard, nationwide, stable; avoids ambiguous “city boundary” debates.
+
+### D3: **Source-driven Cadence**
+
+Each source has its own schedule (monthly/release-based/event-driven).
+**Reason:** Honest freshness; avoids waste and “fake daily updates.”
+
+### D4: **QuerySpec (not LLM → SQL)**
+
+Copilot produces structured QuerySpec JSON; server validates and generates SQL.
+**Reason:** Safety, explainability, testability, and no hallucinated queries.
+
+---
+
+## 4) Data Model (Postgres) — LLD
+
+### 4.1 Tables Overview
+
+* `metric` — what can be shown (layer definition)
+* `source` — data source metadata + terms + attribution
+* `source_config` — cadence + enable/disable + check strategy
+* `source_run` — ingestion run history
+* `raw_payload` — hash + storage pointer for raw responses
+* `region` — geo hierarchy and metadata
+* `fact_value` — normalized numeric facts with provenance
+
+### 4.2 DDL (Minimal MVP)
+
+> Note: Use Flyway migrations to apply.
+
+```sql
+-- 1) Metrics catalog
+CREATE TABLE metric (
+  metric_id           TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  unit                TEXT NOT NULL,
+  description         TEXT,
+  default_granularity TEXT NOT NULL,  -- MONTH|QUARTER|YEAR|EVENT
+  supported_geo_levels TEXT NOT NULL  -- e.g. 'STATE,COUNTY' (simple MVP)
+);
+
+-- 2) Source registry
+CREATE TABLE source (
+  source_id           TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,
+  type                TEXT NOT NULL,  -- PUBLIC (future: UPLOADED)
+  terms_url           TEXT,
+  attribution_text    TEXT,
+  notes               TEXT
+);
+
+-- 3) Source scheduling config
+CREATE TABLE source_config (
+  source_id           TEXT PRIMARY KEY REFERENCES source(source_id),
+  enabled             BOOLEAN NOT NULL DEFAULT TRUE,
+  schedule_cron       TEXT NOT NULL,          -- cron string
+  timezone            TEXT NOT NULL DEFAULT 'UTC',
+  check_strategy      TEXT NOT NULL,          -- CHECK_AND_INGEST_IF_NEW | INGEST_ALWAYS
+  max_lookback_periods INT NOT NULL DEFAULT 3,
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 4) Ingestion runs
+CREATE TABLE source_run (
+  run_id              UUID PRIMARY KEY,
+  source_id           TEXT NOT NULL REFERENCES source(source_id),
+  started_at          TIMESTAMPTZ NOT NULL,
+  ended_at            TIMESTAMPTZ,
+  status              TEXT NOT NULL,  -- SUCCESS|NO_CHANGE|FAILED
+  rows_upserted       INT NOT NULL DEFAULT 0,
+  error_summary       TEXT
+);
+
+CREATE INDEX idx_source_run_source_started ON source_run(source_id, started_at DESC);
+
+-- 5) Raw payload reference (optional but strong for credibility)
+CREATE TABLE raw_payload (
+  payload_id          UUID PRIMARY KEY,
+  source_id           TEXT NOT NULL REFERENCES source(source_id),
+  run_id              UUID NOT NULL REFERENCES source_run(run_id),
+  payload_hash        TEXT NOT NULL,
+  storage_ref         TEXT NOT NULL,   -- local path or key (future S3)
+  stored_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 6) Regions (geo hierarchy)
+CREATE TABLE region (
+  region_pk           UUID PRIMARY KEY,
+  geo_level           TEXT NOT NULL,  -- STATE|COUNTY|PLACE
+  geo_id              TEXT NOT NULL,  -- FIPS or GEOID
+  name                TEXT NOT NULL,
+  parent_region_pk    UUID REFERENCES region(region_pk),
+  centroid_lat        DOUBLE PRECISION,
+  centroid_lon        DOUBLE PRECISION,
+  UNIQUE (geo_level, geo_id)
+);
+
+-- 7) Facts (normalized numeric values)
+CREATE TABLE fact_value (
+  metric_id           TEXT NOT NULL REFERENCES metric(metric_id),
+  source_id           TEXT NOT NULL REFERENCES source(source_id),
+
+  geo_level           TEXT NOT NULL,  -- STATE|COUNTY|PLACE
+  geo_id              TEXT NOT NULL,
+
+  period_start        DATE NOT NULL,
+  period_end          DATE NOT NULL,
+
+  value_numeric        NUMERIC NOT NULL,
+
+  retrieved_at        TIMESTAMPTZ NOT NULL,
+  source_published_at TIMESTAMPTZ,
+
+  is_aggregated       BOOLEAN NOT NULL DEFAULT FALSE,
+  aggregation_method  TEXT,
+
+  payload_id          UUID REFERENCES raw_payload(payload_id),
+
+  PRIMARY KEY (metric_id, source_id, geo_level, geo_id, period_start, period_end),
+
+  CHECK (
+    (is_aggregated = FALSE AND aggregation_method IS NULL)
+    OR
+    (is_aggregated = TRUE AND aggregation_method IS NOT NULL)
+  )
+);
+
+CREATE INDEX idx_fact_lookup ON fact_value(metric_id, source_id, geo_level, geo_id, period_start);
+```
+
+---
+
+## 5) Ingestion Architecture (Jobs) — LLD
+
+### 5.1 Concepts
+
+* **Source Plugin**: encapsulates fetch/check + normalize + upsert.
+* **Dispatcher**: runs frequently (e.g., every 10 minutes) and executes due sources.
+* **Cadence**: configured per source (`source_config.schedule_cron`).
+* **Run Logging**: every attempt creates `source_run`.
+* **Change detection**: plugin can return `NO_CHANGE`.
+
+### 5.2 Dispatcher Flow
+
+1. Scheduler tick (every N minutes)
+2. Query DB for enabled sources
+3. For each source:
+
+   * if due, acquire lock
+   * create `source_run`
+   * execute plugin
+   * store raw payload pointer (optional)
+   * upsert facts (idempotent)
+   * set status `SUCCESS|NO_CHANGE|FAILED`
+   * release lock
+
+### 5.3 Locking (Single-VM now, scalable later)
+
+MVP options:
+
+* **DB advisory lock** per `source_id` (recommended for simplicity)
+* Or a `source_lock` table with “locked_until”
+
+### 5.4 Plugin Interfaces (Java)
+
+```java
+public interface SourcePlugin {
+  String sourceId();
+  SourceCheckResult checkForUpdates(SourceContext ctx) throws Exception;
+  IngestResult ingest(SourceContext ctx, SourceCheckResult check) throws Exception;
+}
+
+public final class SourceContext {
+  public final Instant now;
+  public final DataSource dataSource; // JDBC
+  public final HttpClient httpClient;
+  public final Clock clock;
+  // config, logger, etc.
+  // ...
+}
+
+public final class SourceCheckResult {
+  public final boolean hasUpdates;
+  public final String updateToken; // e.g., latest period id or release id
+  public final Instant sourcePublishedAt; // optional if known
+  // ...
+}
+
+public final class IngestResult {
+  public final int rowsUpserted;
+  public final UUID payloadId; // optional
+  public final boolean noChange;
+}
+```
+
+### 5.5 Idempotent Upsert Strategy
+
+* Facts upsert on primary key:
+  `(metric_id, source_id, geo_level, geo_id, period_start, period_end)`
+* If same key exists:
+
+  * update `value_numeric` only if changed
+  * always keep `retrieved_at` reflecting latest retrieval, OR store as separate point only if the source’s data is truly revised (MVP: update existing).
+
+**Design choice (recommended):**
+
+* For a given period, keep **one record** and update it if the source revises.
+* Keep run history in `source_run` and raw payload hash for audit.
+
+---
+
+## 6) API Design — LLD
+
+### 6.1 API Principles
+
+* All endpoints versioned: `/api/v1/...`
+* Responses always include provenance:
+
+  * `source` object (id/name/terms)
+  * `retrieved_at` (per series or summary)
+  * `source_published_at` if available
+* No endpoint returns “derived” or “estimated” values beyond transparent aggregation.
+
+### 6.2 Core Endpoints
+
+**Catalog**
+
+* `GET /api/v1/metrics`
+* `GET /api/v1/sources`
+* `GET /api/v1/coverage?metricId=...&sourceId=...`
+
+**Regions**
+
+* `GET /api/v1/regions/search?q=...`
+* `GET /api/v1/regions/{geoLevel}/{geoId}`
+* `GET /api/v1/regions/{geoLevel}/{geoId}/children`
+
+**Map**
+
+* `GET /api/v1/map?metricId=...&sourceId=...&geoLevel=...&parentGeoLevel=...&parentGeoId=...&period=YYYY-MM`
+
+  * returns values for all regions at `geoLevel` under the parent + legend stats + provenance.
+
+**Time series**
+
+* `GET /api/v1/timeseries?metricId=...&sourceId=...&geoLevel=...&geoId=...&from=YYYY-MM-DD&to=YYYY-MM-DD`
+
+**Export**
+
+* `GET /api/v1/export/csv?...same as timeseries...`
+
+**Status**
+
+* `GET /api/v1/status/sources`
+
+**Copilot**
+
+* `POST /api/v1/copilot/query` (read-only)
+
+### 6.3 Example Response Payloads
+
+#### Metrics
+
+```json
+[
+  {
+    "metricId": "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH",
+    "name": "Electricity Retail Price",
+    "unit": "cents/kWh",
+    "defaultGranularity": "MONTH",
+    "supportedGeoLevels": ["STATE"],
+    "description": "Average retail price as published by the source."
+  }
+]
+```
+
+#### Sources
+
+```json
+[
+  {
+    "sourceId": "EIA",
+    "name": "U.S. Energy Information Administration",
+    "type": "PUBLIC",
+    "termsUrl": "https://example.gov/terms",
+    "attributionText": "Source: EIA",
+    "notes": "Official public dataset."
+  }
+]
+```
+
+#### Map (choropleth values)
+
+```json
+{
+  "metric": { "metricId": "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH", "unit": "cents/kWh" },
+  "source": { "sourceId": "EIA", "name": "U.S. Energy Information Administration", "termsUrl": "..." },
+  "geoLevel": "STATE",
+  "parent": null,
+  "period": { "start": "2025-12-01", "end": "2025-12-31" },
+  "retrievedAt": "2026-01-06T14:15:00Z",
+  "sourcePublishedAt": "2026-01-02T00:00:00Z",
+  "legend": {
+    "min": 8.2,
+    "max": 42.9,
+    "p05": 10.1,
+    "p50": 16.8,
+    "p95": 30.7
+  },
+  "values": [
+    { "geoId": "20", "name": "Kansas", "value": 14.6, "retrievedAt": "2026-01-06T14:15:00Z" }
+  ],
+  "notes": [
+    "If a region has no value for this period, it will be omitted from values and displayed as 'No data' in the UI."
+  ]
+}
+```
+
+#### Timeseries
+
+```json
+{
+  "metric": { "metricId": "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH", "unit": "cents/kWh" },
+  "source": { "sourceId": "EIA", "name": "U.S. Energy Information Administration" },
+  "region": { "geoLevel": "STATE", "geoId": "20", "name": "Kansas" },
+  "points": [
+    {
+      "periodStart": "2025-10-01",
+      "periodEnd": "2025-10-31",
+      "value": 14.1,
+      "retrievedAt": "2026-01-06T14:15:00Z",
+      "sourcePublishedAt": "2025-11-15T00:00:00Z"
+    }
+  ]
+}
+```
+
+#### Source Status
+
+```json
+[
+  {
+    "sourceId": "EIA",
+    "enabled": true,
+    "scheduleCron": "0 0 9 * * MON",
+    "timezone": "UTC",
+    "lastRun": {
+      "runId": "b29f0f19-6f72-4cdb-ae1e-7808c9a0d3bf",
+      "status": "NO_CHANGE",
+      "startedAt": "2026-01-06T14:00:00Z",
+      "endedAt": "2026-01-06T14:00:05Z",
+      "rowsUpserted": 0
+    },
+    "lastSuccessAt": "2026-01-02T14:00:00Z"
+  }
+]
+```
+
+---
+
+## 7) Read-Only Copilot — LLD
+
+### 7.1 What Copilot Can Do (MVP)
+
+* Rank: “Top 10 states by electricity price in Dec 2025”
+* Filter: “States where broadband served% < 70”
+* Cross-layer: “High electricity price AND low broadband availability”
+* Trend: “States with largest increase from 2020 to 2025” (only if time series exists)
+
+### 7.2 Hard Rules
+
+* **Read-only**: Copilot cannot modify DB.
+* **No guessing**: if required data is missing, return “Insufficient data”.
+* **Always cite** sources and timestamps.
+* **Explain period alignment** (e.g., “latest common period”).
+
+### 7.3 QuerySpec JSON Schema (Draft)
+
+Copilot produces this; server validates it and generates SQL.
+
+```json
+{
+  "queryType": "RANKING|FILTER|INTERSECTION|TREND",
+  "geoLevel": "STATE|COUNTY|PLACE",
+  "time": {
+    "mode": "EXACT_PERIOD|RANGE|LATEST_COMMON",
+    "period": "YYYY-MM",
+    "from": "YYYY-MM-DD",
+    "to": "YYYY-MM-DD"
+  },
+  "metrics": [
+    {
+      "metricId": "string",
+      "sourceId": "string",
+      "agg": "AVG|SUM|COUNT|MIN|MAX",
+      "direction": "ASC|DESC"
+    }
+  ],
+  "filters": [
+    { "metricId": "string", "op": "<|<=|>|>=|==", "value": 0 }
+  ],
+  "limit": 10
+}
+```
+
+### 7.4 Validation Rules (Server-side)
+
+* `metrics.length` between 1 and 3
+* `geoLevel` must be supported by each metric+source (coverage check)
+* Only allow `agg` values listed
+* `INTERSECTION` requires ≥2 metrics
+* `LATEST_COMMON` must find a period where all metric+source combos have data
+* If no data: return `INSUFFICIENT_DATA` response (no partial truth unless user asks for partial)
+
+### 7.5 Copilot Endpoint Response (Example)
+
+```json
+{
+  "status": "OK|INSUFFICIENT_DATA|INVALID_QUERY",
+  "summary": "States with high electricity price and low broadband availability (latest common period: 2025-12).",
+  "period": { "start": "2025-12-01", "end": "2025-12-31", "mode": "LATEST_COMMON" },
+  "table": {
+    "columns": ["State", "Electricity Price (cents/kWh)", "Broadband Served % (100/20)"],
+    "rows": [
+      ["State A", 28.1, 62.0]
+    ]
+  },
+  "highlightRegions": [
+    { "geoLevel": "STATE", "geoId": "12" }
+  ],
+  "citations": [
+    { "sourceId": "EIA", "retrievedAt": "2026-01-06T14:15:00Z", "termsUrl": "..." },
+    { "sourceId": "FCC", "retrievedAt": "2026-01-03T12:00:00Z", "termsUrl": "..." }
+  ],
+  "notes": [
+    "No values were estimated. Results include only regions with data for all requested metrics."
+  ]
+}
+```
+
+---
+
+## 8) Frontend (Vue) — LLD
+
+### 8.1 Routes
+
+* `/` — Map Explorer
+* `/transparency` — Transparency & Methodology (static ideology + dynamic status widget)
+* `/status` (optional) — Data status page
+* `/about` (optional) — project overview
+
+### 8.2 Major Components
+
+* `MapExplorerPage`
+
+  * `MetricSelector`
+  * `SourceSelector` (+ Compare mode later)
+  * `GeoBreadcrumb`
+  * `PeriodPicker`
+  * `MapView`
+  * `Legend` (must show retrieved timestamps + source)
+  * `RegionDrawer` (details + chart + export)
+  * `CopilotPanel` (read-only)
+
+### 8.3 Choropleth Rendering Rules
+
+* If map has values: compute color scale using legend stats from backend (min/max or percentiles).
+* If map has **no values** (unsupported geo level or missing): disable fill; show “No data available”.
+
+### 8.4 Provenance UI Requirements (Everywhere)
+
+* Map legend: Source + Period + Retrieved time
+* Details drawer: show `retrieved_at` and optional `source_published_at`
+* Timeseries: show provenance in tooltip or header
+* Transparency page: show ideology and live source status
+
+---
+
+## 9) Static Transparency Page (Ideology + Proof)
+
+The transparency page must contain:
+
+* Principles (no ads, no forecasting, no blending)
+* Data coverage explanation
+* List of sources with links/terms
+* “Data Status” widget populated from `/api/v1/status/sources`
+* Contact/feedback link
+
+**Reason:** Trust and defensibility for decision makers.
+
+---
+
+## 10) Configuration & 12-Factor Contract
+
+### 10.1 Required Environment Variables (API)
+
+* `APP_ENV=local|prod`
+* `SERVER_PORT=8080`
+* `DB_HOST=postgres`
+* `DB_PORT=5432`
+* `DB_NAME=utility_explorer`
+* `DB_USER=utility_explorer`
+* `DB_PASSWORD=utility_explorer`
+* `FLYWAY_ENABLED=true`
+* `INGESTION_DISPATCHER_ENABLED=true`
+* `INGESTION_TICK_SECONDS=600`
+* `COPILOT_ENABLED=true`
+* `COPILOT_API_KEY=change_me` (MVP simple)
+* `CORS_ALLOWED_ORIGINS=http://localhost:5173`
+
+Optional:
+
+* `LOG_LEVEL=INFO`
+* `RAW_PAYLOAD_STORAGE_DIR=/data/raw`
+* `BOUNDARY_ASSETS_DIR=/app/assets/boundaries`
+
+### 10.2 Required Environment Variables (UI)
+
+* `VITE_API_BASE_URL=http://localhost:8080/api/v1`
+
+---
+
+## 11) Docker Compose + .env Template (Local-First)
+
+### 11.1 `.env.template`
+
+```dotenv
+# --- API ---
+APP_ENV=local
+SERVER_PORT=8080
+
+DB_HOST=postgres
+DB_PORT=5432
+DB_NAME=utility_explorer
+DB_USER=utility_explorer
+DB_PASSWORD=utility_explorer
+
+FLYWAY_ENABLED=true
+INGESTION_DISPATCHER_ENABLED=true
+INGESTION_TICK_SECONDS=600
+
+COPILOT_ENABLED=true
+COPILOT_API_KEY=dev_key_change_me
+CORS_ALLOWED_ORIGINS=http://localhost:5173
+
+RAW_PAYLOAD_STORAGE_DIR=/data/raw
+
+# --- UI ---
+VITE_API_BASE_URL=http://localhost:8080/api/v1
+```
+
+### 11.2 `docker-compose.yml`
+
+```yaml
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: ./utility-explorer-api
+    environment:
+      APP_ENV: ${APP_ENV}
+      SERVER_PORT: ${SERVER_PORT}
+
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      FLYWAY_ENABLED: ${FLYWAY_ENABLED}
+      INGESTION_DISPATCHER_ENABLED: ${INGESTION_DISPATCHER_ENABLED}
+      INGESTION_TICK_SECONDS: ${INGESTION_TICK_SECONDS}
+
+      COPILOT_ENABLED: ${COPILOT_ENABLED}
+      COPILOT_API_KEY: ${COPILOT_API_KEY}
+
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      RAW_PAYLOAD_STORAGE_DIR: ${RAW_PAYLOAD_STORAGE_DIR}
+
+    ports:
+      - "${SERVER_PORT}:${SERVER_PORT}"
+    depends_on:
+      - postgres
+    volumes:
+      - rawpayloads:${RAW_PAYLOAD_STORAGE_DIR}
+
+  # UI is typically run with npm dev locally; optionally add this for prod-like testing
+  # ui:
+  #   build: ./utility-explorer-ui
+  #   environment:
+  #     VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+  #   ports:
+  #     - "5173:80"
+  #   depends_on:
+  #     - api
+
+volumes:
+  pgdata:
+  rawpayloads:
+```
+
+### 11.3 Local Run Steps
+
+1. Copy `.env.template` → `.env` and adjust if needed
+2. `docker compose up --build`
+3. UI:
+
+   * `cd utility-explorer-ui`
+   * `npm install`
+   * `npm run dev`
+
+---
+
+## 12) Boundary Assets Strategy (GeoJSON/TopoJSON)
+
+### 12.1 What we serve
+
+* `states.topo.json`
+* `counties.topo.json`
+* `places.topo.json`
+
+### 12.2 Why static assets
+
+* Ensures fast UI and offline-ish development
+* Avoids runtime dependency on external boundary services
+* Boundaries change rarely; can be versioned
+
+**Note:** Boundaries are not “facts” and don’t violate the “no manipulation” rule; they are reference geometry.
+
+---
+
+## 13) Observability & Operations
+
+### 13.1 Health & Readiness
+
+* Spring Actuator:
+
+  * `/actuator/health`
+  * `/actuator/info`
+
+### 13.2 Key metrics to expose/log
+
+* last successful run per source
+* count of failures last 7 days
+* ingestion duration
+* number of fact rows upserted per run
+
+### 13.3 Logging
+
+* structured logs to stdout
+* do not log secrets or raw payloads in logs
+
+---
+
+## 14) Security (MVP Baseline)
+
+* Copilot endpoint requires `X-API-Key`
+* Rate limit (basic) by IP or key (simple filter)
+* Strict CORS for production
+* Secrets only in env vars; never commit `.env`
+
+---
+
+## 15) Testing Strategy
+
+### 15.1 Backend
+
+* Unit tests:
+
+  * Source plugin parsing and change detection
+  * QuerySpec validation
+  * Coverage validation (metric+source+geo compatibility)
+* Integration tests:
+
+  * Testcontainers Postgres
+  * Ingestion idempotency (run twice = no duplicates)
+  * Map endpoint correctness
+
+### 15.2 Frontend
+
+* smoke tests for:
+
+  * route rendering
+  * map loads boundaries
+  * legend shows provenance
+  * “No data available” cases
+
+---
+
+## 16) Recommended ADR Set (Optional but Portfolio-Strong)
+
+Create `/docs/adr/`:
+
+* `0001-map-first-ui.md` — why map-first + drilldown
+* `0002-no-imputation-no-forecasting.md` — integrity rule
+* `0003-provenance-model.md` — retrieved_at/source_published_at/raw payload hash
+* `0004-source-cadence-dispatcher.md` — source schedules
+* `0005-copilot-queryspec.md` — structured queries and validation
+
+---
+
+## 17) MVP Implementation Order (Practical)
+
+1. **DB schema + Flyway** for core tables
+2. **Metric + source catalog endpoints**
+3. **Map + timeseries endpoints** (return provenance)
+4. **Static boundaries** in UI + map wiring
+5. **Ingestion dispatcher framework** + one source plugin (electricity at state level)
+6. **Transparency page** + data status widget
+7. **Copilot QuerySpec + validation** + one cross-layer query type
+
+---
+
+## 18) Design Summary (Why this is the right approach)
+
+* It is **trust-first**: provenance and no data invention prevent integrity questions.
+* It is **portfolio-grade**: shows modern engineering practices (12-factor, provenance, plugin ingestion, safe Copilot).
+* It is **cheap-first**: deployable to a single VM while remaining cloud-ready.
+* It is **SaaS-ready later**: multi-source, catalog-driven, and API-first under the hood without building billing/multi-tenancy now.
+
+```
+
+If you want, I can also generate a **matching `OPENAPI.yaml` skeleton** and a **Flyway migration file layout** that corresponds exactly to the schema and endpoints described here (still keeping everything local-first).
+::contentReference[oaicite:0]{index=0}
+```
