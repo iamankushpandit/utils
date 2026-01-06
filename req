@@ -1,0 +1,482 @@
+# Utility Explorer — Requirements and Architecture (v1)
+
+## 1) Summary
+
+Build a **local-first**, **cloud-ready** web application that visualizes **free public utility-related datasets** on a US map with drilldowns and historical charts. The product must be **transparent**: no ads, no forecasting, no filling gaps, no hidden blending of sources. A **read-only Copilot** can answer questions across layers using only stored facts and must always include provenance.
+
+---
+
+## 2) Goals
+
+* **Map-first dashboard** for decision-makers:
+
+  * US → State → County → City (Census Place) drilldown **for boundaries**
+  * Choropleth coloring **only where the chosen source supports that geography**
+  * Click region → show **historical chart** and **source metadata**
+* **Transparency-first**:
+
+  * Show “No data available” rather than deriving/estimating
+  * If multiple sources exist for the same metric, show **all** separately
+  * Every value includes **retrieved timestamp** and source attribution
+* **Data ingestion jobs**:
+
+  * Run on **each source’s own cadence**
+  * Record run history, errors, and “no change” runs
+* **Read-only Copilot**:
+
+  * Cross-layer questions (e.g., “high electricity + low broadband”) using only stored data
+  * Must cite provenance; must refuse when data is missing
+* **Local-first development**:
+
+  * Full stack runs locally with Docker Compose
+  * Config via env vars (12-factor aligned)
+* **Cheapest reliable hosting later**:
+
+  * Designed to deploy on a single small VM/VPS; can evolve to managed services.
+
+---
+
+## 3) Non-goals (v1)
+
+* No paid datasets
+* No ads, affiliate links, or sponsored placement
+* No forecasting, smoothing, “estimated effective rates,” or inferred values
+* No user-uploaded datasets in MVP (but design should allow later)
+* No billing/subscriptions in MVP
+* No multi-tenant isolation enforcement in MVP (but schema should be tenant-ready)
+
+---
+
+## 4) Principles and Integrity Rules
+
+1. **Free public data only** (no ads)
+2. **No data invention**:
+
+   * No forecast
+   * No imputation
+   * No “effective price” calculations
+3. **No silent blending**:
+
+   * If multiple sources provide similar metrics, show them separately
+4. **Provenance everywhere**:
+
+   * Always show `retrieved_at` (when we fetched it)
+   * If available, also show `source_published_at` (when the source says it updated)
+5. **Aggregation is allowed only if transparent**:
+
+   * Aggregations like count/sum/avg to present at a map level are OK
+   * Must be labeled “Aggregated view”
+   * Must be reproducible (query + grouping rules documented)
+
+---
+
+## 5) User Personas
+
+* **Decision maker** (primary): compares regions quickly, wants credible sourcing
+* **Analyst/Researcher**: wants exportable data with provenance
+* **Developer** (secondary): consumes the API, validates sources, builds integrations
+
+---
+
+## 6) UX Requirements (Vue.js)
+
+### 6.1 Core Screens
+
+1. **Map Explorer (primary)**
+
+   * Controls:
+
+     * Layer/Metric selector
+     * Source selector (and “Compare sources” mode)
+     * Geography selector (only enabled levels supported by selected source)
+     * Period selector (month/year/etc. depending on layer)
+   * Map:
+
+     * US states choropleth (default)
+     * Drilldown to counties/places (boundaries always available; values only when supported)
+   * Hover tooltip:
+
+     * region name
+     * value (or “No data”)
+     * unit
+     * period
+     * retrieved timestamp
+
+2. **Region Details Drawer**
+
+   * Header: Region name + geo id + breadcrumb path
+   * Data cards:
+
+     * Current value
+     * Source(s) and provenance
+   * **Time series chart**
+   * “Export CSV” for the selected region/metric/time-range
+
+3. **Transparency & Methodology (static page)**
+
+   * Ideology rules
+   * What we do / do not do
+   * Coverage + limitations
+   * Data sources list (with links)
+   * Live “Data Status” section (last refresh per source)
+
+4. **Data Status (optional separate page)**
+
+   * Table: source → cadence → last success → next run → last error
+
+5. **Copilot (read-only)**
+
+   * Query box + examples
+   * Results:
+
+     * Short answer
+     * Table (rankings / filtered lists)
+     * Sources used + retrieved timestamps
+     * “Highlight on map” action
+
+### 6.2 Visual/Interaction Requirements
+
+* Choropleth color scale: green (low) → red (high)
+* Legend shows:
+
+  * min/max (or percentile boundaries)
+  * unit
+  * period
+  * **retrieved_at**
+* Drilldown behavior:
+
+  * If a layer has no data at deeper levels:
+
+    * keep boundaries visible
+    * disable color fill
+    * show “No data available at this geography for the selected source”
+
+---
+
+## 7) Backend Requirements (Java Spring Boot)
+
+### 7.1 Core Modules (recommended packages)
+
+* `api` — REST controllers
+* `service` — business logic
+* `geo` — region metadata & hierarchy
+* `metrics` — metric catalog, validation, coverage rules
+* `sources` — ingestion source plugins
+* `ingestion` — scheduler + run tracking
+* `persistence` — JPA repositories
+* `security` — API keys, rate limiting (lightweight)
+* `observability` — health, metrics, structured logging
+
+### 7.2 API Principles
+
+* Versioned endpoints: `/api/v1/...`
+* Strict response schema (OpenAPI)
+* Include provenance fields in all data responses:
+
+  * `source_id`, `retrieved_at`, optional `source_published_at`
+* Read endpoints are cacheable where appropriate (ETag/Cache-Control)
+
+### 7.3 Required Endpoints (v1)
+
+#### Catalog / Metadata
+
+* `GET /api/v1/metrics`
+* `GET /api/v1/sources`
+* `GET /api/v1/coverage?metricId=...&sourceId=...`
+
+#### Geography
+
+* `GET /api/v1/regions/search?q=...`
+* `GET /api/v1/regions/{regionId}`
+* `GET /api/v1/regions/{regionId}/children`
+
+#### Map Data
+
+* `GET /api/v1/map`
+
+  * params: `metricId`, `sourceId`, `geoLevel`, `parentRegionId?`, `period`
+  * returns: values for that level + legend stats + provenance
+
+#### Time Series
+
+* `GET /api/v1/timeseries`
+
+  * params: `regionId`, `metricId`, `sourceId`, `from`, `to`
+  * returns: ordered points + provenance summary
+
+#### Exports
+
+* `GET /api/v1/export/csv`
+
+  * same filters as timeseries/map (server generates CSV including source fields)
+
+#### Data Status
+
+* `GET /api/v1/status/sources`
+
+  * last successful run, next scheduled run, last error
+
+#### Copilot (read-only)
+
+* `POST /api/v1/copilot/query`
+
+  * input: user question text
+  * output: structured result + sources + “highlight region ids”
+  * enforcement: only allow validated query shapes (see §9)
+
+---
+
+## 8) Data Collection Jobs Requirements
+
+### 8.1 Source-driven Scheduling
+
+* Each data source defines:
+
+  * `cadence` (cron or interval)
+  * `check_strategy`:
+
+    * `CHECK_AND_INGEST_IF_NEW`
+    * `INGEST_ALWAYS` (rare)
+* System runs jobs only when due.
+
+### 8.2 Dispatcher Pattern
+
+* A lightweight scheduler runs every N minutes:
+
+  * reads due sources from DB
+  * acquires a job lock per source (to avoid overlap)
+  * runs the source plugin
+* Records outcome:
+
+  * `SUCCESS`, `NO_CHANGE`, `FAILED`
+
+### 8.3 Provenance and Audit
+
+For every run:
+
+* store `source_run` record:
+
+  * `started_at`, `ended_at`, `status`, `rows_upserted`, `error`
+* store `raw_payload` reference:
+
+  * payload hash + storage pointer (DB text or file path; cloud later can be S3)
+* store fact rows with:
+
+  * `retrieved_at` always
+  * optional `source_published_at` if source provides it
+
+### 8.4 Idempotency & Dedup
+
+* All writes must be idempotent:
+
+  * facts keyed by `(source_id, metric_id, geo_level, geo_id, period_start, period_end)`
+* If nothing changed:
+
+  * record `NO_CHANGE`
+  * do not duplicate facts
+
+---
+
+## 9) Read-only Copilot Requirements (Cross-layer)
+
+### 9.1 Capabilities
+
+* Rankings: top/bottom N regions by metric
+* Filters: threshold-based
+* Cross-layer intersection: “high A and low B”
+* Trend queries: “increase since year X” (only if time series exists)
+
+### 9.2 Hard Safety/Integrity Constraints
+
+* **Read-only**: must not modify DB
+* **No invented values**: must refuse if data is missing
+* Must include:
+
+  * metrics used
+  * sources used
+  * retrieved timestamps
+  * coverage level
+  * period alignment rule (e.g., “latest common period”)
+
+### 9.3 Implementation Approach (recommended)
+
+* Copilot converts user prompt → **QuerySpec JSON**
+* Server validates QuerySpec with strict schema + allow-list
+* Server generates SQL (not the model)
+* Response includes region ids to highlight on the map
+
+**Default cross-layer rule:** “latest common period across requested metrics/sources” unless user asks otherwise.
+
+---
+
+## 10) Data Model Requirements (Postgres)
+
+### 10.1 Core Tables (normalized)
+
+* `metric`
+* `source`
+* `source_config` (cadence, enabled, check strategy)
+* `source_run` (history of ingestions)
+* `raw_payload` (hash + pointer)
+* `region` (geo hierarchy metadata)
+* `fact_value` (numeric facts + provenance)
+
+### 10.2 Required Columns for `fact_value`
+
+* `metric_id`, `source_id`
+* `geo_level`, `geo_id`
+* `period_start`, `period_end`
+* `value_numeric`, `unit`
+* `retrieved_at`
+* optional `source_published_at`
+* `is_aggregated` + `aggregation_method` (required if aggregated)
+
+### 10.3 Tenant-ready (not enforced in MVP)
+
+* Include nullable `tenant_id` columns in key tables OR plan for adding later via migration.
+
+---
+
+## 11) Architecture
+
+### 11.1 Logical Architecture
+
+* **Vue UI**
+
+  * Map + chart rendering
+  * Calls backend APIs only (no direct calls to sources)
+* **Spring Boot API**
+
+  * Serves map/time series/export/copilot endpoints
+  * Runs ingestion dispatcher + source plugins
+* **Postgres**
+
+  * Stores regions, facts, provenance, run history
+* **Static geo boundary assets**
+
+  * Prebuilt GeoJSON/TopoJSON served as static files (backend or CDN later)
+
+### 11.2 Deployment Architecture (MVP)
+
+* Local: Docker Compose
+* Hosted: single VM running containers (frontend static via nginx or cloud static hosting; backend + DB)
+
+---
+
+## 12) Code Approach and Standards
+
+### 12.1 Repo Structure (recommended)
+
+* Two repos (portfolio-friendly):
+
+  * `utility-explorer-ui` (Vue)
+  * `utility-explorer-api` (Spring Boot + migrations)
+* Shared docs folder in each, or one “docs” repo later.
+
+### 12.2 12-Factor Alignment
+
+* Config in env vars only
+* Logs to stdout/stderr
+* Stateless backend
+* DB as backing service
+* Build → Release → Run separation via container images
+
+### 12.3 “Beyond 12-factor” Practices
+
+* **Provenance-first storage** (raw payload + hash + source_run)
+* **Contract-first APIs** (OpenAPI)
+* **ADRs** (architecture decisions)
+* **Reproducible ingestion** (replay runs deterministically)
+* **Security defaults** (API keys, rate limiting)
+* **Observability** (health/readiness, metrics, structured logs)
+
+---
+
+## 13) Security Requirements
+
+* No ads, no trackers by default
+* API key support (at least for Copilot and export endpoints)
+* Rate limiting per key/IP (lightweight)
+* CORS locked down in prod
+* Secrets never stored in git; `.env.template` only
+
+---
+
+## 14) Observability Requirements
+
+* Spring Actuator endpoints:
+
+  * `/health`, `/ready` (or equivalent)
+* Metrics:
+
+  * ingestion run counts by status
+  * last successful run per source
+  * API latency percentiles (basic)
+* Structured logs (JSON preferred)
+
+---
+
+## 15) Testing Requirements
+
+* Unit tests:
+
+  * source parsers/normalizers
+  * QuerySpec validation
+  * provenance handling
+* Integration tests:
+
+  * Postgres with Testcontainers
+  * ingestion idempotency (run twice → no duplicates)
+* UI:
+
+  * smoke tests for routes and key components
+
+---
+
+## 16) MVP Scope and Milestones
+
+### MVP (v1)
+
+* Map Explorer with 1–2 layers + at least 1 data source per layer
+* Drilldown boundaries (values only where supported)
+* History chart
+* Transparency page (static) + Data Status (dynamic)
+* Ingestion dispatcher with per-source cadence
+* CSV export
+* Copilot read-only with cross-layer intersection for **state-level** metrics
+
+### v1.1
+
+* Add more layers/sources
+* “Compare sources” UI mode
+* Better search + saved views (optional, still read-only)
+
+### v2 (not now)
+
+* User-uploaded datasets (BYOD)
+* True multi-tenancy + roles
+* Shareable links, report builder, PDF exports
+
+---
+
+## 17) Acceptance Criteria (v1)
+
+* App runs locally from a single command (Docker Compose)
+* For any displayed number, UI shows:
+
+  * source name
+  * period
+  * retrieved timestamp
+* Drilldown never invents data:
+
+  * if unsupported geography, show “No data available”
+* Jobs run by configured cadence and record:
+
+  * `SUCCESS/NO_CHANGE/FAILED`
+  * last success visible in UI Data Status
+* Copilot:
+
+  * read-only
+  * supports cross-layer question at state level
+  * refuses when data missing
+  * cites source + retrieved timestamps
