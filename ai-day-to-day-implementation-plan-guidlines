@@ -1,0 +1,392 @@
+Below is a **day-wise feeding plan** designed specifically for an **AI implementer with tight context/token limits** (like Amazon Q free tier). It’s built to keep each day “small enough,” avoid drift, and ensure the AI always has the minimum info it needs without rereading the whole project every time.
+
+This plan assumes:
+
+* You have **two repos** (UI + API) or one mono-repo (either works).
+* You want **local-first** completion before any hosting.
+* You will “feed” the AI **only the documents and the specific files it must change** that day.
+
+---
+
+# Day-wise AI Feeding Plan (Token-Safe, Free-Tier Friendly)
+
+## Core operating rule (every day)
+
+Each day starts by feeding the AI exactly 3 things:
+
+1. `PROJECT_STATE.md` (short, updated)
+2. `TODAY_TASK.md` (small scope + acceptance checks)
+3. Only the **files it must edit today** (and nothing else)
+
+End each day by having the AI update `PROJECT_STATE.md`.
+
+---
+
+## Prep: Create these 5 “AI control” files once (manual or Day 1)
+
+1. `PROJECT_STATE.md` – 1–2 pages max
+2. `AI_IMPLEMENTATION_RULES.md` – your guardrails (from earlier)
+3. `ARCHITECTURE.md` – high-level + jobs approach (keep concise)
+4. `openapi.yaml` – contract
+5. `SOURCE_INTAKE_TEMPLATE.md` – for adding datasets later
+
+> Keep these short. If any doc grows beyond ~2 pages, split it.
+
+---
+
+# Day 1 — Repo skeleton + execution baseline
+
+### Feed the AI
+
+* `AI_IMPLEMENTATION_RULES.md`
+* `ARCHITECTURE.md` (only the essentials)
+* `openapi.yaml`
+* `TODAY_TASK.md`:
+
+  * Create repo structure
+  * Add local run instructions skeleton
+  * Add `.env.template`
+  * Add `docker-compose.yml` baseline (postgres + api placeholder)
+
+### Output expected
+
+* Repo structure (folders)
+* Compose file
+* `.env.template`
+* A placeholder Spring Boot app that starts
+* `PROJECT_STATE.md` created and filled
+
+### Acceptance checks
+
+* `docker compose up` starts Postgres
+* Spring Boot starts and responds with a simple `/actuator/health` (or placeholder route)
+
+---
+
+# Day 2 — DB migrations (Flyway) + core schema
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* `TODAY_TASK.md`:
+
+  * Add Flyway
+  * Add migrations for: `metric`, `source`, `source_config`, `source_run`, `region`, `fact_value`, `raw_payload` (optional)
+  * Add seed migration for 1 metric + 1 source
+
+### Files to include
+
+* `pom.xml`
+* `application.yml`
+* `db/migration/*.sql`
+
+### Output expected
+
+* Flyway migrations
+* DB starts with tables
+* Seed rows inserted
+
+### Acceptance checks
+
+* App starts with Flyway applied (no errors)
+* Manual DB check shows tables + seed data
+
+---
+
+# Day 3 — Catalog endpoints (metrics, sources, coverage)
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* `openapi.yaml` (only relevant paths if you want to save tokens—copy just `/metrics`, `/sources`, `/coverage`)
+* `TODAY_TASK.md`:
+
+  * Implement GET `/metrics`, `/sources`, `/coverage`
+  * Ensure responses match OpenAPI exactly
+  * Include basic error responses
+
+### Files to include
+
+* Controller/service/repo classes used
+* any DTOs
+
+### Acceptance checks
+
+* Curl returns JSON matching OpenAPI
+* Integration test verifies response schema shape
+
+---
+
+# Day 4 — Regions (region table + search + children)
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* OpenAPI sections: `/regions/search`, `/regions/{...}`, `/children`
+* `TODAY_TASK.md`:
+
+  * Implement region endpoints
+  * Add minimal region seeding (a few states)
+  * Implement search by name and children lookup
+
+### Acceptance checks
+
+* Search works
+* Children endpoint works for a seeded parent
+* No invented region logic; uses DB
+
+---
+
+# Day 5 — Map endpoint (read path only) + legend stats
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* OpenAPI section: `/map`
+* `TODAY_TASK.md`:
+
+  * Implement `/map` that reads from `fact_value`
+  * Compute legend stats (min/max + optional percentiles)
+  * Return provenance + `retrievedAt`
+
+### Design guardrail to include in TODAY_TASK.md
+
+* Missing regions must not be fabricated; omit or null per your chosen contract.
+
+### Acceptance checks
+
+* Returns empty values if no facts exist
+* Returns correct values when seeded test facts exist
+
+---
+
+# Day 6 — Timeseries + CSV export
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* OpenAPI sections: `/timeseries`, `/export/csv`
+* `TODAY_TASK.md`:
+
+  * Implement both endpoints
+  * Ensure provenance in each point
+  * CSV includes provenance columns
+
+### Acceptance checks
+
+* Timeseries returns sorted points in range
+* Export downloads CSV with headers and timestamps
+
+---
+
+# Day 7 — Status endpoints (source runs, last success, next run)
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* OpenAPI: `/status/sources`
+* `TODAY_TASK.md`:
+
+  * Implement status endpoint
+  * Include last run + last success + computed next run time from cron
+  * Ensure no heavy logic; keep it simple
+
+### Acceptance checks
+
+* Endpoint works even if no runs exist
+* Uses DB run history
+
+---
+
+# Day 8 — Ingestion framework skeleton (no real external sources yet)
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* `ARCHITECTURE.md` (only job section)
+* `TODAY_TASK.md`:
+
+  * Implement dispatcher tick
+  * Implement locking per source
+  * Create plugin interface
+  * Add “mock source plugin” that inserts a few rows deterministically
+
+### Acceptance checks
+
+* Dispatcher can be enabled/disabled via env
+* Running it twice doesn’t duplicate facts (idempotency)
+
+---
+
+# Day 9 — First real data source intake (design + metadata only)
+
+Because web access/licensing can be tricky, keep Day 9 purely “source intake” documentation unless you already have a vetted source.
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* `SOURCE_INTAKE_TEMPLATE.md`
+* `TODAY_TASK.md`:
+
+  * Complete intake for 1 source (doc links, cadence, geo level, period)
+  * Add that source to DB seed
+  * Add coverage mapping
+
+### Acceptance checks
+
+* Source appears in `/sources` and `/coverage`
+* No ingestion code added if terms are unclear
+
+---
+
+# Day 10 — Vue UI shell + routes + transparency page
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* UI wireflows for: shell + transparency
+* `TODAY_TASK.md`:
+
+  * Create Vue app skeleton
+  * Create routes `/` and `/transparency`
+  * Transparency page uses `/status/sources`
+
+### Acceptance checks
+
+* UI runs locally
+* Transparency page renders static principles + dynamic status
+
+---
+
+# Day 11 — Map rendering (boundaries) + data fetch + legend
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* UI wireflow for Map Explore
+* `TODAY_TASK.md`:
+
+  * Load static TopoJSON/GeoJSON boundaries
+  * Fetch `/map` and render choropleth
+  * Show “No data” clearly if empty
+
+### Acceptance checks
+
+* Map draws boundaries with no data
+* With seeded facts, choropleth colors change
+
+---
+
+# Day 12 — Region drawer + history chart + CSV export
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* UI wireflow for drawer + chart
+* `TODAY_TASK.md`:
+
+  * Click region → open drawer
+  * Drawer calls `/timeseries`
+  * Add export button calling `/export/csv`
+  * Always show provenance
+
+### Acceptance checks
+
+* Chart renders history
+* Export works
+* Provenance visible
+
+---
+
+# Day 13 — Copilot v1 (read-only, minimal)
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* Copilot rules (short)
+* OpenAPI `/copilot/query`
+* `TODAY_TASK.md`:
+
+  * Implement API key check
+  * Implement QuerySpec internal model + validation
+  * Implement 1 query type: INTERSECTION using latest common period
+  * Return citations list
+
+### Acceptance checks
+
+* No data → `INSUFFICIENT_DATA`
+* With seeded data → correct table
+* No hallucinated metrics
+
+---
+
+# Day 14 — Polishing day: tests + docs + “demo script”
+
+### Feed the AI
+
+* `PROJECT_STATE.md`
+* `TODAY_TASK.md`:
+
+  * Expand integration tests
+  * Ensure OpenAPI matches outputs
+  * Write a demo walkthrough in `DEMO.md`
+  * Ensure everything runs locally in a predictable way
+
+### Acceptance checks
+
+* One command local run
+* Demo steps reproduce key workflows
+
+---
+
+# How to keep each day within token limits (practical rules)
+
+## Daily input size budget
+
+Keep daily feed to:
+
+* `PROJECT_STATE.md` ≤ 1 page
+* `TODAY_TASK.md` ≤ 20 lines
+* only 5–10 code files max (the ones being changed)
+
+## “No file dumps” rule
+
+Never paste the entire repo. Only paste:
+
+* the files AI must edit, or
+* diffs, or
+* a directory tree + the key files.
+
+## End-of-day “closeout”
+
+Require AI to output:
+
+1. Files changed list
+2. Commands to validate
+3. Next day prerequisites
+4. Updated `PROJECT_STATE.md`
+
+---
+
+# What you should generate to make this smoother (templates)
+
+## `TODAY_TASK.md` template
+
+* Goal:
+* Files allowed to change:
+* Requirements:
+* Acceptance checks (commands + expected):
+* Stop conditions (when to ask questions):
+
+## `PROJECT_STATE.md` template
+
+* Completed:
+* In progress:
+* Known decisions:
+* Open questions:
+* Current run commands:
+* Notes on contracts (OpenAPI “truth”)
+
+---
+
+If you want, I can also write **Day 1–Day 14 `TODAY_TASK.md` files** for you (ready to paste each day), with strict stop/ask rules and acceptance checks—so you can just hand them to Amazon Q as-is.
