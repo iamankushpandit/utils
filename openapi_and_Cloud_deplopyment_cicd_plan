@@ -1,0 +1,886 @@
+Here you go — **(1) a complete `openapi.yaml`** you can drop into the backend repo, and **(2) a practical, cheapest-reliable cloud + CI/CD plan** that deploys automatically on repo changes.
+
+---
+
+## 1) `openapi.yaml` (v1)
+
+```yaml
+openapi: 3.0.3
+info:
+  title: Utility Explorer API
+  version: 1.0.0
+  description: >
+    Utility Explorer is a transparency-first, provenance-first API for exploring
+    free public utility-related datasets (electricity, broadband, water, wastewater).
+    No forecasting. No imputation. No hidden blending. Every value returned includes
+    retrieval timestamps and source attribution.
+
+servers:
+  - url: /api/v1
+    description: Default (same origin)
+
+tags:
+  - name: Catalog
+  - name: Sources
+  - name: Regions
+  - name: Map
+  - name: TimeSeries
+  - name: Export
+  - name: Status
+  - name: Copilot
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /metrics:
+    get:
+      tags: [Catalog]
+      summary: List supported metrics (layers)
+      description: Returns the metric catalog available in the system.
+      security: [] # public
+      responses:
+        "200":
+          description: Metrics list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Metric"
+
+  /sources:
+    get:
+      tags: [Sources]
+      summary: List data sources
+      description: Returns known data sources and their attribution/terms.
+      security: [] # public
+      responses:
+        "200":
+          description: Sources list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Source"
+
+  /coverage:
+    get:
+      tags: [Catalog]
+      summary: Get coverage information for a metric + source
+      description: Tells which geography levels and time granularities are supported.
+      security: [] # public
+      parameters:
+        - in: query
+          name: metricId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: sourceId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Coverage response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Coverage"
+        "404":
+          description: Unknown metric or source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /regions/search:
+    get:
+      tags: [Regions]
+      summary: Search regions by name
+      description: Search by partial name; returns matching regions across geo levels.
+      security: [] # public
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+            minLength: 2
+      responses:
+        "200":
+          description: Region search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Region"
+
+  /regions/{geoLevel}/{geoId}:
+    get:
+      tags: [Regions]
+      summary: Get region metadata
+      security: [] # public
+      parameters:
+        - in: path
+          name: geoLevel
+          required: true
+          schema:
+            $ref: "#/components/schemas/GeoLevel"
+        - in: path
+          name: geoId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Region metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Region"
+        "404":
+          description: Region not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /regions/{geoLevel}/{geoId}/children:
+    get:
+      tags: [Regions]
+      summary: List children of a region
+      security: [] # public
+      parameters:
+        - in: path
+          name: geoLevel
+          required: true
+          schema:
+            $ref: "#/components/schemas/GeoLevel"
+        - in: path
+          name: geoId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Child regions list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Region"
+        "404":
+          description: Region not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /map:
+    get:
+      tags: [Map]
+      summary: Get choropleth map values for a geography level
+      description: >
+        Returns values for all regions at the requested geoLevel under an optional parent.
+        Values include provenance. If a region has no data, it may be omitted from 'values';
+        UI should render it as 'No data available'.
+      security: [] # public (recommended)
+      parameters:
+        - in: query
+          name: metricId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: sourceId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: geoLevel
+          required: true
+          schema:
+            $ref: "#/components/schemas/GeoLevel"
+        - in: query
+          name: parentGeoLevel
+          required: false
+          schema:
+            $ref: "#/components/schemas/GeoLevel"
+        - in: query
+          name: parentGeoId
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: period
+          required: true
+          description: Period in YYYY-MM (for monthly) or YYYY (for yearly), depending on metric/source.
+          schema:
+            type: string
+            example: "2025-12"
+      responses:
+        "200":
+          description: Map response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MapResponse"
+        "400":
+          description: Invalid request (unsupported geo level / invalid period)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /timeseries:
+    get:
+      tags: [TimeSeries]
+      summary: Get time series values for a region
+      security: [] # public
+      parameters:
+        - in: query
+          name: metricId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: sourceId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: geoLevel
+          required: true
+          schema:
+            $ref: "#/components/schemas/GeoLevel"
+        - in: query
+          name: geoId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: from
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: to
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Time series response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeSeriesResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /export/csv:
+    get:
+      tags: [Export]
+      summary: Export a time series as CSV
+      description: CSV includes provenance columns (source, retrieved_at, source_published_at).
+      parameters:
+        - in: query
+          name: metricId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: sourceId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: geoLevel
+          required: true
+          schema:
+            $ref: "#/components/schemas/GeoLevel"
+        - in: query
+          name: geoId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: from
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: to
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /status/sources:
+    get:
+      tags: [Status]
+      summary: Get ingestion status for all sources
+      description: Used by the Transparency page to show last success, next run, failures.
+      security: [] # public (recommended)
+      responses:
+        "200":
+          description: Status list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SourceStatus"
+
+  /copilot/query:
+    post:
+      tags: [Copilot]
+      summary: Read-only Copilot query (cross-layer supported)
+      description: >
+        Copilot is strictly read-only and must return grounded results only.
+        Requires API key. Server validates query shape and refuses if data is missing.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CopilotQueryRequest"
+      responses:
+        "200":
+          description: Copilot query response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CopilotQueryResponse"
+        "401":
+          description: Missing/invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "400":
+          description: Invalid query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for protected endpoints (Copilot, optional exports)
+
+  schemas:
+    GeoLevel:
+      type: string
+      enum: [STATE, COUNTY, PLACE]
+
+    Metric:
+      type: object
+      required: [metricId, name, unit, defaultGranularity, supportedGeoLevels]
+      properties:
+        metricId: { type: string }
+        name: { type: string }
+        unit: { type: string }
+        description: { type: string }
+        defaultGranularity:
+          type: string
+          enum: [MONTH, QUARTER, YEAR, EVENT]
+        supportedGeoLevels:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeoLevel"
+
+    Source:
+      type: object
+      required: [sourceId, name, type]
+      properties:
+        sourceId: { type: string }
+        name: { type: string }
+        type:
+          type: string
+          enum: [PUBLIC, UPLOADED]
+        termsUrl: { type: string, nullable: true }
+        attributionText: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+
+    Coverage:
+      type: object
+      required: [metricId, sourceId, supportedGeoLevels, supportedGranularities]
+      properties:
+        metricId: { type: string }
+        sourceId: { type: string }
+        supportedGeoLevels:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeoLevel"
+        supportedGranularities:
+          type: array
+          items:
+            type: string
+            enum: [MONTH, QUARTER, YEAR, EVENT]
+        notes:
+          type: array
+          items: { type: string }
+
+    Region:
+      type: object
+      required: [geoLevel, geoId, name]
+      properties:
+        geoLevel:
+          $ref: "#/components/schemas/GeoLevel"
+        geoId: { type: string }
+        name: { type: string }
+        parent:
+          type: object
+          nullable: true
+          properties:
+            geoLevel: { $ref: "#/components/schemas/GeoLevel" }
+            geoId: { type: string }
+        centroid:
+          type: object
+          nullable: true
+          properties:
+            lat: { type: number, format: double }
+            lon: { type: number, format: double }
+
+    Period:
+      type: object
+      required: [start, end]
+      properties:
+        start: { type: string, format: date }
+        end: { type: string, format: date }
+
+    LegendStats:
+      type: object
+      required: [min, max]
+      properties:
+        min: { type: number }
+        max: { type: number }
+        p05: { type: number, nullable: true }
+        p50: { type: number, nullable: true }
+        p95: { type: number, nullable: true }
+
+    Provenance:
+      type: object
+      required: [retrievedAt]
+      properties:
+        retrievedAt:
+          type: string
+          format: date-time
+        sourcePublishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        isAggregated:
+          type: boolean
+          default: false
+        aggregationMethod:
+          type: string
+          nullable: true
+
+    MapValue:
+      type: object
+      required: [geoId, name, value, provenance]
+      properties:
+        geoId: { type: string }
+        name: { type: string }
+        value: { type: number }
+        provenance:
+          $ref: "#/components/schemas/Provenance"
+
+    MapResponse:
+      type: object
+      required: [metric, source, geoLevel, period, retrievedAt, legend, values]
+      properties:
+        metric:
+          type: object
+          required: [metricId, unit]
+          properties:
+            metricId: { type: string }
+            unit: { type: string }
+        source:
+          $ref: "#/components/schemas/Source"
+        geoLevel:
+          $ref: "#/components/schemas/GeoLevel"
+        parent:
+          type: object
+          nullable: true
+          properties:
+            geoLevel: { $ref: "#/components/schemas/GeoLevel" }
+            geoId: { type: string }
+        period:
+          $ref: "#/components/schemas/Period"
+        retrievedAt:
+          type: string
+          format: date-time
+        sourcePublishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        legend:
+          $ref: "#/components/schemas/LegendStats"
+        values:
+          type: array
+          items:
+            $ref: "#/components/schemas/MapValue"
+        notes:
+          type: array
+          items: { type: string }
+
+    TimeSeriesPoint:
+      type: object
+      required: [periodStart, periodEnd, value, provenance]
+      properties:
+        periodStart: { type: string, format: date }
+        periodEnd: { type: string, format: date }
+        value: { type: number }
+        provenance:
+          $ref: "#/components/schemas/Provenance"
+
+    TimeSeriesResponse:
+      type: object
+      required: [metric, source, region, points]
+      properties:
+        metric:
+          type: object
+          required: [metricId, unit]
+          properties:
+            metricId: { type: string }
+            unit: { type: string }
+        source:
+          $ref: "#/components/schemas/Source"
+        region:
+          $ref: "#/components/schemas/Region"
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSeriesPoint"
+        notes:
+          type: array
+          items: { type: string }
+
+    SourceRunSummary:
+      type: object
+      required: [status, startedAt]
+      properties:
+        runId: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [SUCCESS, NO_CHANGE, FAILED]
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time, nullable: true }
+        rowsUpserted: { type: integer, nullable: true }
+        errorSummary: { type: string, nullable: true }
+
+    SourceStatus:
+      type: object
+      required: [sourceId, enabled, scheduleCron, timezone]
+      properties:
+        sourceId: { type: string }
+        enabled: { type: boolean }
+        scheduleCron: { type: string }
+        timezone: { type: string }
+        lastRun:
+          $ref: "#/components/schemas/SourceRunSummary"
+        lastSuccessAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextRunAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CopilotQueryRequest:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+          description: Natural language question. Copilot is read-only and grounded.
+        preferGeoLevel:
+          $ref: "#/components/schemas/GeoLevel"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+
+    CopilotCitation:
+      type: object
+      required: [sourceId, retrievedAt]
+      properties:
+        sourceId: { type: string }
+        retrievedAt: { type: string, format: date-time }
+        sourcePublishedAt: { type: string, format: date-time, nullable: true }
+        termsUrl: { type: string, nullable: true }
+
+    CopilotTable:
+      type: object
+      required: [columns, rows]
+      properties:
+        columns:
+          type: array
+          items: { type: string }
+        rows:
+          type: array
+          items:
+            type: array
+            items:
+              oneOf:
+                - type: string
+                - type: number
+                - type: integer
+                - type: boolean
+                - type: "null"
+
+    CopilotHighlightRegion:
+      type: object
+      required: [geoLevel, geoId]
+      properties:
+        geoLevel: { $ref: "#/components/schemas/GeoLevel" }
+        geoId: { type: string }
+
+    CopilotQueryResponse:
+      type: object
+      required: [status, summary, citations]
+      properties:
+        status:
+          type: string
+          enum: [OK, INSUFFICIENT_DATA, INVALID_QUERY]
+        summary: { type: string }
+        period:
+          type: object
+          nullable: true
+          properties:
+            start: { type: string, format: date }
+            end: { type: string, format: date }
+            mode:
+              type: string
+              enum: [EXACT_PERIOD, RANGE, LATEST_COMMON]
+        table:
+          $ref: "#/components/schemas/CopilotTable"
+        highlightRegions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CopilotHighlightRegion"
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/CopilotCitation"
+        notes:
+          type: array
+          items: { type: string }
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string }
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+```
+
+---
+
+## 2) Hosting + CI/CD plan (after local implementation)
+
+You said: **cheapest + reliable**, AWS not required, and **automatic deploy on repo change**. The cleanest, most portfolio-friendly setup is:
+
+* **UI**: static hosting (Cloudflare Pages or similar) OR serve static on the same VM
+* **API + DB**: single VPS running Docker
+* **CI/CD**: GitHub Actions
+* **Container Registry**: GitHub Container Registry (GHCR)
+* **Deploy method**: SSH to VPS and `docker compose pull && docker compose up -d`
+
+This is cloud-ready, 12-factor, and easy to explain in interviews.
+
+---
+
+### 2.1 After local works: production packaging checklist
+
+Do these before touching cloud:
+
+**Backend**
+
+* Dockerfile builds a small image (JRE slim)
+* Flyway migrations run on startup
+* Health endpoint enabled (Spring Actuator)
+* All config via env vars
+* Logs to stdout
+
+**Frontend**
+
+* `npm run build` creates static assets
+* One of:
+
+  * static host (preferred), or
+  * nginx container on VPS serving `dist/`
+
+**Data ingestion jobs**
+
+* Enabled via env flag (so you can disable in local/prod if needed)
+* Runs on **source cadence** stored in DB (`source_config`) or in config initially
+
+---
+
+### 2.2 Cloud hosting plan (VPS route)
+
+**Goal:** One VM runs everything with Docker Compose.
+
+**What you provision**
+
+* A VPS with Ubuntu (2–4GB RAM recommended for Java + Postgres)
+* A domain name (optional but recommended)
+* Docker + Docker Compose plugin installed
+* Firewall: allow ports 80/443 only (and optionally 22 restricted)
+
+**Containers on the VPS**
+
+* `postgres` (volume-backed)
+* `api` (Spring Boot)
+* `reverse-proxy` (Caddy or Nginx) for HTTPS and routing
+* optional `ui` (nginx) if you don’t use external static hosting
+
+**HTTPS**
+
+* Use Caddy (easiest) or Nginx + Let’s Encrypt
+* Proxy routes:
+
+  * `/api/*` → Spring Boot
+  * everything else → UI (if hosted on same VM) OR redirect to static host domain
+
+**Backups**
+
+* Nightly `pg_dump` to a backup folder
+* Optional: sync backups to inexpensive object storage later
+
+---
+
+### 2.3 CI/CD design (GitHub Actions)
+
+You’ll likely have **two repos** (UI + API). That means two pipelines.
+
+#### Pipeline A: Backend (API)
+
+Trigger:
+
+* On push to `main` (or on release tag)
+
+Steps:
+
+1. Run tests: `./mvnw test`
+2. Build image and tag:
+
+   * `ghcr.io/<org>/<repo>:<sha>`
+   * `ghcr.io/<org>/<repo>:latest` (optional)
+3. Push image to GHCR
+4. SSH into VPS and run deploy script:
+
+   * `docker login ghcr.io`
+   * `docker compose pull api`
+   * `docker compose up -d --remove-orphans`
+   * `docker image prune -f` (optional)
+5. (Optional) hit `/actuator/health` to confirm deploy succeeded
+
+Secrets needed in GitHub:
+
+* `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`
+* `GHCR_TOKEN` (or use GitHub’s built-in token with permissions)
+* `PROD_ENV_FILE` or set env vars on VPS (recommended)
+
+#### Pipeline B: Frontend (UI)
+
+Option 1 (recommended): **Static host auto-deploy**
+
+* On push to `main`, Cloudflare Pages (or similar) builds and deploys automatically.
+* CI can still run lint/tests.
+
+Option 2: Host UI on VPS via nginx container
+
+* Build and push UI image to GHCR
+* SSH deploy like backend
+
+---
+
+### 2.4 Deployment method on VPS (simple, reliable)
+
+On the VPS:
+
+* Create `/opt/utility-explorer/`
+* Put a `docker-compose.yml` there
+* Put a `.env` there (NOT in git)
+* Run `docker compose up -d`
+
+Your CI only needs to:
+
+* pull images
+* restart containers
+
+This keeps the VPS as the “runtime environment,” and GitHub Actions as the “build/release engine.”
+
+---
+
+### 2.5 Recommended environments
+
+* **local**: Docker Compose on your machine
+* **prod**: VPS Compose
+* **staging** (optional): second VPS or same VPS with different ports and env file
+
+---
+
+### 2.6 Rollback strategy (important for credibility)
+
+Because images are tagged by commit SHA:
+
+* To rollback: on VPS, set the API image tag back to a previous SHA and `docker compose up -d`
+
+Keep the last 5–10 images.
+
+---
+
+## 3) What you should implement next (in order)
+
+1. Add `openapi.yaml` to backend repo + configure Swagger UI (optional)
+2. Create Dockerfiles for API and UI
+3. Build `docker-compose.yml` for local
+4. Build “prod compose” (same file with overrides)
+5. Add GitHub Actions:
+
+   * API: test → build image → push → deploy via SSH
+   * UI: deploy via static host OR build image → push → deploy
+6. Provision a VPS and perform the first manual deploy
+7. Turn on CI deploy to run automatically on pushes to `main`
+
+---
+
+If you want, I can also provide:
+
+* A **sample GitHub Actions workflow** for the API (`.github/workflows/deploy-api.yml`)
+* A **sample VPS `docker-compose.yml`** (with Caddy for HTTPS)
+* A **deploy script** used by the workflow (`scripts/deploy.sh`)
