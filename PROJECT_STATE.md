@@ -1,9 +1,9 @@
 # PROJECT_STATE.md — Utility Explorer
 
 ## Current status (as of 2026-01-06)
-- Phase/Day: Day 7 (COMPLETED)
+- Phase/Day: Day 10 (COMPLETED)
 - Repo layout: Monorepo structure
-- Local run: Docker Compose + Spring Boot + Flyway + All read APIs + Status ready
+- Local run: Docker Compose + Spring Boot + Vue UI ready
 
 ## What is built
 - Memory Bank documentation structure
@@ -17,6 +17,9 @@
 - Timeseries endpoint: /timeseries with sorted points and provenance
 - Export endpoint: /export/csv with provenance columns
 - Status endpoint: /status/sources with run history and configuration
+- Ingestion framework: dispatcher + locking + mock plugin
+- Source documentation: SOURCES.md with EIA + placeholders
+- Vue UI shell: routes, transparency page with status widget
 
 ## What is agreed (non-negotiable)
 - No invented data (no forecasting/interpolation/imputation)
@@ -42,9 +45,9 @@
 - Cron parsing dependency for nextRunAt (return null initially)
 
 ## Next planned step
-- Day 8: Add ingestion framework skeleton (dispatcher + locking + plugin interface) with mock source plugin
+- Day 11: Implement boundary rendering and choropleth basics
 
 ## Validation commands (target)
 - docker compose up -d
 - curl http://localhost:8080/actuator/health
-- npm run dev (UI) [Day 10+]
+- cd utility-explorer-ui && npm run dev

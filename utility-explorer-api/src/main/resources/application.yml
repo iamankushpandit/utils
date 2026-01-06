@@ -24,6 +24,11 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+  task:
+    scheduling:
+      pool:
+        size: 2
+
 management:
   endpoints:
     web:
