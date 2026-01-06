@@ -1,0 +1,243 @@
+Here’s a clean **job design** that fits your principles (source-specific cadence, provenance, no wasted runs, transparent status) and works **locally first** but scales to cloud later.
+
+## 1) Job architecture overview
+
+### Key idea
+
+You don’t build “a daily job.”
+You build a **job framework** where each data source declares:
+
+* **Cadence** (cron / interval)
+* **Change detection method** (how to tell if new data exists)
+* **Ingestion logic** (fetch → normalize → upsert)
+
+### Components
+
+1. **Dispatcher** (scheduler): wakes up every N minutes, finds jobs due
+2. **Source Runner** (plugin): executes one source ingestion safely
+3. **Run tracking** (DB): every attempt is recorded with status + timestamps
+4. **Locking** (DB): prevents overlapping runs of the same source
+5. **Provenance** (DB): facts stored with `retrieved_at` (+ `source_published_at` if present)
+
+---
+
+## 2) Data structures you need (conceptual)
+
+### `source_config` (per source schedule)
+
+* `source_id`
+* `enabled`
+* `schedule_cron` (or `interval_minutes`)
+* `timezone` (recommend UTC)
+* `check_strategy`:
+
+  * `CHECK_AND_INGEST_IF_NEW` (default)
+  * `INGEST_ALWAYS` (rare)
+* `max_lookback_periods` (helps when sources revise past periods)
+* optional: `retry_policy` settings
+
+### `source_run` (immutable run log)
+
+* `run_id`
+* `source_id`
+* `status`: `SUCCESS | NO_CHANGE | FAILED | PARTIAL` (optional)
+* `started_at`, `ended_at`
+* `rows_upserted`
+* `error_summary`
+* `update_token_seen` (the “latest version/release/period id” you observed)
+
+### `raw_payload` (optional but great for trust)
+
+* `payload_id`, `run_id`, `payload_hash`, `storage_ref`
+
+### `fact_value` (normalized facts)
+
+* keys: `(source_id, metric_id, geo_level, geo_id, period_start, period_end)`
+* values: `value_numeric`, `retrieved_at`, optional `source_published_at`
+* plus `is_aggregated`, `aggregation_method` if needed
+
+---
+
+## 3) Dispatcher design (how jobs get triggered)
+
+### Dispatcher tick
+
+Run a lightweight process every **5–15 minutes**:
+
+**Algorithm**
+
+1. Load all `enabled` sources
+2. For each source, compute `next_run_at` from `schedule_cron`
+3. If `now >= next_run_at` and source not already running → trigger run
+
+> This avoids “one scheduled method per source” and lets you add sources without code changes.
+
+### Locking
+
+When you trigger a run, acquire a lock per `source_id`:
+
+Options:
+
+* **Postgres advisory locks** (simple and reliable)
+* Or a `source_lock` table with TTL
+
+This ensures:
+
+* You never run the same source twice concurrently
+* Multiple “dispatcher ticks” won’t duplicate work
+
+---
+
+## 4) Source Runner (plugin) design
+
+Each source implements the same contract:
+
+### Step A — Check (cheap)
+
+Goal: determine if new data exists without downloading everything.
+
+Examples of “update tokens”:
+
+* latest available **period** (e.g., `2025-12`)
+* dataset **release id**
+* HTTP **ETag**
+* “last modified” timestamp
+
+**Output**
+
+* `has_update` true/false
+* `update_token` (string)
+* optional `source_published_at`
+
+### Step B — Ingest (only if needed)
+
+If new data exists (or strategy is `INGEST_ALWAYS`):
+
+1. Fetch data (file/API)
+2. Store raw payload reference + hash (optional but recommended)
+3. Normalize into `fact_value` rows
+4. Upsert idempotently
+5. Mark run success
+
+If no update:
+
+* Mark run `NO_CHANGE` and stop (still useful for status)
+
+---
+
+## 5) Change detection rules (prevents wasted runs)
+
+For each source you define a “newness” rule:
+
+### Default rule (recommended)
+
+* Compare `update_token` from today vs most recent stored `update_token` in DB
+* If same → `NO_CHANGE`
+
+### Handling revisions (important)
+
+Some sources revise historical months/periods.
+So define:
+
+* `max_lookback_periods` = 3 (for monthly data)
+* If update detected, ingestion may re-fetch last 3 periods and upsert them.
+
+This keeps you accurate without pretending daily updates.
+
+---
+
+## 6) Idempotency and deduping (critical)
+
+Your ingestion must be safe to re-run any time.
+
+### Rule
+
+Upsert facts using a strict unique key:
+`(source_id, metric_id, geo_level, geo_id, period_start, period_end)`
+
+If a run re-fetches the same period:
+
+* it overwrites the value if the source revised it
+* it updates `retrieved_at`
+* optionally updates `source_published_at`
+
+This makes jobs replayable and removes fear of “double counting.”
+
+---
+
+## 7) Failure handling and retries (practical, not overbuilt)
+
+### Failure categories
+
+* **Transient**: network, timeout, 5xx → retry
+* **Permanent**: schema changed, auth changed, 404 moved → fail and alert via status UI
+
+### Retry strategy (simple MVP)
+
+* Retry up to 3 times with exponential backoff (e.g., 30s, 2m, 10m)
+* After failures: mark source as degraded in status endpoint
+* Keep the last error message visible to users (public trust)
+
+---
+
+## 8) Scheduling and cadence examples (how you configure)
+
+* Electricity monthly dataset:
+
+  * cron: run weekly Monday 9am UTC
+  * strategy: `CHECK_AND_INGEST_IF_NEW`
+  * lookback: 3 months
+
+* Release-based broadband dataset:
+
+  * cron: weekly
+  * check token: release id
+  * ingest when release changes
+
+* Event-based compliance datasets:
+
+  * cron: daily or weekly depending on volume
+  * check: last_modified/etag if supported
+
+---
+
+## 9) Where jobs run (local + cloud)
+
+### Local
+
+Jobs run inside the same Spring Boot app (simple).
+
+### Cloud evolution (when you host)
+
+Split into two containers using the **same codebase**:
+
+* **API service**: serves requests only
+* **Worker service**: runs dispatcher + ingestion only
+
+Controlled by env var:
+
+* `ROLE=api` or `ROLE=worker`
+
+This is a clean scaling story without redesign.
+
+---
+
+## 10) What the UI can show (powered by run logs)
+
+Because every run is logged, your UI can display:
+
+* last success per source
+* last attempted run + status
+* “no change” runs (proves you checked)
+* next scheduled run time
+* data freshness lag (“last success was 18 days ago”)
+
+This is exactly the transparency you want.
+
+---
+
+If you want one more step in “design only” (no implementation), I can write:
+
+* the **state machine** for runs (PENDING → RUNNING → SUCCESS/NO_CHANGE/FAILED)
+* a **sequence diagram** for Dispatcher → Runner → DB
+* a “source plugin checklist” template (how to add a new source consistently)
