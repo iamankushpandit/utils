@@ -31,6 +31,9 @@ The API is small and predictable: catalog, map/timeseries data, ingestion contro
 - `POST /ingestion/run` and `/ingestion/run/{sourceId}` — trigger ingestion.  
 - `GET /export/csv` — export map/timeseries to CSV.
 
+### API Docs (Swagger/OpenAPI)
+Swagger UI is available when the API runs with the SpringDoc starter: open `/swagger-ui.html` (or `/swagger-ui/index.html`) to browse and try endpoints; machine-readable JSON lives at `/v3/api-docs`. In production, restrict this to authenticated/internal users. Include examples for common flows (state map, county drilldown, timeseries export) and clarify required headers (e.g., `X-API-Key` for copilot).
+
 ### Environment Variables (minimum)
 - **UI:** `VITE_API_BASE_URL` (default `http://localhost:8080/api/v1`).
 - **API:** `EIA_API_KEY`, `CENSUS_API_KEY`, DB settings (`DB_URL`, `DB_USER`, `DB_PASS`), `INGESTION_DISPATCHER_ENABLED`, optional `SERVER_PORT`, CORS allowed origins, log level.

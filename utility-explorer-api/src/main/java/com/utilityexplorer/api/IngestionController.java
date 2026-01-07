@@ -4,11 +4,14 @@ import com.utilityexplorer.ingestion.IngestionDispatcher;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/ingestion")
+@Tag(name = "Ingestion", description = "Trigger ingestion runs")
 public class IngestionController {
     private final ObjectProvider<IngestionDispatcher> dispatcherProvider;
 
@@ -17,6 +20,7 @@ public class IngestionController {
     }
 
     @PostMapping("/run")
+    @Operation(summary = "Run ingestion for all sources")
     public ResponseEntity<Map<String, String>> runNow() {
         IngestionDispatcher dispatcher = dispatcherProvider.getIfAvailable();
         if (dispatcher == null) {
@@ -34,6 +38,7 @@ public class IngestionController {
     }
 
     @PostMapping("/run/{sourceId}")
+    @Operation(summary = "Run ingestion for a single source")
     public ResponseEntity<Map<String, String>> runNowForSource(@PathVariable String sourceId) {
         IngestionDispatcher dispatcher = dispatcherProvider.getIfAvailable();
         if (dispatcher == null) {

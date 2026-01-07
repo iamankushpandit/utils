@@ -7,12 +7,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/copilot")
 @ConditionalOnProperty(name = "COPILOT_ENABLED", havingValue = "true")
+@Tag(name = "Copilot", description = "Text-based copilot queries (conditional on COPILOT_ENABLED)")
 public class CopilotController {
     
     @Autowired
@@ -22,6 +25,10 @@ public class CopilotController {
     private String apiKey;
     
     @PostMapping("/query")
+    @Operation(
+        summary = "Ask the copilot",
+        description = "Submit a text question. Requires X-API-Key header matching COPILOT_API_KEY."
+    )
     public ResponseEntity<?> query(
             @RequestHeader(value = "X-API-Key", required = false) String providedKey,
             @RequestBody Map<String, String> request) {
