@@ -25,7 +25,7 @@ public class MapService {
     @Autowired
     private RegionRepository regionRepository;
     
-    public Optional<MapResponse> getMapData(String metricId, String sourceId, String geoLevel, 
+    public Optional<MapResponse> getMapData(String metricId, String sourceId, String geoLevel,
                                            String parentGeoLevel, String parentGeoId, String period) {
         
         // Validate metric and source exist
@@ -36,20 +36,39 @@ public class MapService {
             return Optional.empty();
         }
         
-        // Parse period (assuming YYYY-MM format for now)
+        // Parse period (supports YYYY or YYYY-MM)
         LocalDate periodStart, periodEnd;
         try {
             String[] parts = period.split("-");
             int year = Integer.parseInt(parts[0]);
-            int month = Integer.parseInt(parts[1]);
-            periodStart = LocalDate.of(year, month, 1);
-            periodEnd = periodStart.withDayOfMonth(periodStart.lengthOfMonth());
+            if (parts.length == 1) {
+                periodStart = LocalDate.of(year, 1, 1);
+                periodEnd = LocalDate.of(year, 12, 31);
+            } else {
+                int month = Integer.parseInt(parts[1]);
+                periodStart = LocalDate.of(year, month, 1);
+                periodEnd = periodStart.withDayOfMonth(periodStart.lengthOfMonth());
+            }
         } catch (Exception e) {
             return Optional.empty();
         }
         
         // Get fact values
-        List<FactValue> facts = factValueRepository.findMapData(metricId, sourceId, geoLevel, periodStart, periodEnd);
+        List<FactValue> facts;
+        if (parentGeoLevel != null && parentGeoId != null && !parentGeoId.isBlank()
+            && ("COUNTY".equalsIgnoreCase(geoLevel) || "PLACE".equalsIgnoreCase(geoLevel))
+            && "STATE".equalsIgnoreCase(parentGeoLevel)) {
+            facts = factValueRepository.findMapDataByPrefix(
+                metricId,
+                sourceId,
+                geoLevel,
+                parentGeoId,
+                periodStart,
+                periodEnd
+            );
+        } else {
+            facts = factValueRepository.findMapData(metricId, sourceId, geoLevel, periodStart, periodEnd);
+        }
         
         // Build response
         MapResponse response = new MapResponse();

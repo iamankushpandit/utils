@@ -22,10 +22,6 @@
           <h2>{{ activeMetric.name }}</h2>
           <p class="metric-description">{{ activeMetric.description }}</p>
         </div>
-        <div class="metric-badges">
-          <span class="badge">{{ activeMetric.defaultGranularity }}</span>
-          <span class="badge">{{ activeMetric.supportedGeoLevels.join(', ') }}</span>
-        </div>
       </div>
 
       <div class="source-grid">
@@ -73,10 +69,10 @@
       :region="selectedRegion"
       :selectedMetric="selectedMetricId"
       :selectedSource="selectedSourceId"
+      :metricMeta="activeMetric"
       @close="closeDrawer"
     />
 
-    <CopilotPanel @highlightRegions="onHighlightRegions" />
   </div>
 </template>
 
@@ -84,14 +80,12 @@
 import { apiService } from '../services/api.js'
 import MapComponent from '../components/MapComponent.vue'
 import RegionDrawer from '../components/RegionDrawer.vue'
-import CopilotPanel from '../components/CopilotPanel.vue'
 
 export default {
   name: 'MapExplorer',
   components: {
     MapComponent,
-    RegionDrawer,
-    CopilotPanel
+    RegionDrawer
   },
   data() {
     return {
@@ -164,29 +158,43 @@ export default {
     },
 
     async fetchBestMap(metricId, sourceId) {
+      const metric = this.metrics.find((m) => m.metricId === metricId)
+      const granularity = metric?.defaultGranularity || 'MONTH'
       const now = new Date()
-      const attempts = 60
       let fallback = null
       let fallbackPeriod = null
 
-      for (let i = 0; i <= attempts; i++) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-
+      // Helper to fetch and short-circuit on first hit
+      const tryPeriod = async (period) => {
         const mapData = await apiService.getMap({
           metricId,
           sourceId,
           geoLevel: 'STATE',
           period
         })
-
         if (mapData?.values?.length) {
-          return { mapData, periodLabel: period }
+          return { hit: true, mapData, periodLabel: period }
         }
-
         if (!fallback) {
           fallback = mapData
           fallbackPeriod = period
+        }
+        return { hit: false }
+      }
+
+      if (granularity === 'YEAR') {
+        const currentYear = now.getFullYear()
+        for (let yr = currentYear; yr >= currentYear - 10; yr--) {
+          const attempt = await tryPeriod(String(yr))
+          if (attempt.hit) return attempt
+        }
+      } else {
+        // Month-level fallback (default)
+        for (let i = 0; i <= 60; i++) {
+          const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+          const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+          const attempt = await tryPeriod(period)
+          if (attempt.hit) return attempt
         }
       }
 
@@ -227,15 +235,23 @@ export default {
       this.selectedRegion = null
     },
 
-    onHighlightRegions(regions) {
-      console.log('Highlight regions:', regions)
-    },
-
     getSourcesForMetric(metricId) {
-      if (metricId === 'ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH') {
-        return this.sources.filter((source) => source.sourceId === 'EIA')
+      const metric = this.metrics.find((item) => item.metricId === metricId)
+
+      // Explicit mapping to keep the UI aligned with real data providers
+      const forcedMap = {
+        ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH: ['EIA'],
+        ELECTRICITY_MONTHLY_COST_USD_ACS: ['CENSUS_ACS']
       }
-      return this.sources
+
+      const sourceIds = forcedMap[metricId] || metric?.sourceIds || []
+
+      if (sourceIds.length > 0) {
+        return this.sources.filter((source) => sourceIds.includes(source.sourceId))
+      }
+
+      // If nothing is known, show nothing rather than every source (prevents wrong cards)
+      return []
     }
   }
 }

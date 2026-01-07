@@ -7,6 +7,11 @@ const api = axios.create({
   timeout: 10000
 })
 
+const ingestionApi = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 120000
+})
+
 export const apiService = {
   async getSourcesStatus() {
     const response = await api.get('/status/sources')
@@ -24,7 +29,12 @@ export const apiService = {
   },
 
   async runIngestion() {
-    const response = await api.post('/ingestion/run')
+    const response = await ingestionApi.post('/ingestion/run')
+    return response.data
+  },
+
+  async runIngestionForSource(sourceId) {
+    const response = await ingestionApi.post(`/ingestion/run/${sourceId}`)
     return response.data
   },
   

@@ -60,7 +60,11 @@ export default {
     isOpen: Boolean,
     region: Object,
     selectedMetric: String,
-    selectedSource: String
+    selectedSource: String,
+    metricMeta: {
+      type: Object,
+      default: null
+    }
   },
   data() {
     return {
@@ -98,7 +102,7 @@ export default {
         this.loading = true
         this.error = null
 
-        const { from, to } = this.getLastYearRange()
+        const { from, to } = this.getDateRange()
         const params = {
           metricId: this.selectedMetric,
           sourceId: this.selectedSource,
@@ -132,6 +136,7 @@ export default {
       const categories = points.map(p => this.formatPeriod(p.periodStart))
       const seriesData = points.map(p => p.value)
       const unit = this.timeSeriesData.metric.unit
+      const formatValue = (value) => this.formatNumber(value)
 
       this.chart = Highcharts.chart(this.$refs.chartContainer, {
         chart: {
@@ -152,7 +157,7 @@ export default {
           formatter() {
             const point = points[this.point.index]
             const retrieved = point?.retrievedAt ? new Date(point.retrievedAt).toLocaleString() : 'Unknown'
-            return `Value: ${this.y} ${unit}<br/>Retrieved: ${retrieved}`
+            return `Value: ${formatValue(this.y)} ${unit}<br/>Retrieved: ${retrieved}`
           }
         },
         legend: { enabled: false },
@@ -176,7 +181,12 @@ export default {
     getCurrentValue() {
       if (!this.timeSeriesData?.points?.length) return 'N/A'
       const latest = this.timeSeriesData.points[this.timeSeriesData.points.length - 1]
-      return latest.value
+      return this.formatNumber(latest.value)
+    },
+
+    formatNumber(value) {
+      if (value === null || value === undefined || Number.isNaN(value)) return 'N/A'
+      return Number(value).toFixed(2)
     },
 
     getCurrentPoint() {
@@ -190,7 +200,7 @@ export default {
       try {
         this.exporting = true
 
-        const { from, to } = this.getLastYearRange()
+        const { from, to } = this.getDateRange()
         const params = {
           metricId: this.selectedMetric,
           sourceId: this.selectedSource,
@@ -230,10 +240,20 @@ export default {
     formatPeriod(dateString) {
       if (!dateString) return ''
       const date = new Date(dateString)
+      if (this.metricMeta?.defaultGranularity === 'YEAR') {
+        return date.getFullYear().toString()
+      }
       return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
     },
 
-    getLastYearRange() {
+    getDateRange() {
+      if (this.metricMeta?.defaultGranularity === 'YEAR') {
+        const endYear = new Date().getFullYear() - 1
+        const startYear = endYear - 4
+        const from = `${startYear}-01-01`
+        const to = `${endYear}-12-31`
+        return { from, to }
+      }
       const end = new Date()
       const start = new Date(end.getFullYear(), end.getMonth() - 11, 1)
       const from = start.toISOString().slice(0, 10)

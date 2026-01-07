@@ -12,17 +12,20 @@ public final class ApiDtos {
         private String description;
         private String defaultGranularity;
         private List<String> supportedGeoLevels;
+        private List<String> sourceIds;
 
         public MetricDto() {}
 
         public MetricDto(String metricId, String name, String unit, String description,
-                         String defaultGranularity, List<String> supportedGeoLevels) {
+                         String defaultGranularity, List<String> supportedGeoLevels,
+                         List<String> sourceIds) {
             this.metricId = metricId;
             this.name = name;
             this.unit = unit;
             this.description = description;
             this.defaultGranularity = defaultGranularity;
             this.supportedGeoLevels = supportedGeoLevels;
+            this.sourceIds = sourceIds;
         }
 
         public String getMetricId() { return metricId; }
@@ -42,6 +45,9 @@ public final class ApiDtos {
 
         public List<String> getSupportedGeoLevels() { return supportedGeoLevels; }
         public void setSupportedGeoLevels(List<String> supportedGeoLevels) { this.supportedGeoLevels = supportedGeoLevels; }
+
+        public List<String> getSourceIds() { return sourceIds; }
+        public void setSourceIds(List<String> sourceIds) { this.sourceIds = sourceIds; }
     }
 
     public static class SourceDto {
@@ -413,6 +419,7 @@ public final class ApiDtos {
         private String timezone;
         private LastRunInfo lastRun;
         private String lastSuccessAt;
+        private String nextRunAt;
 
         public SourceStatusResponse() {}
 
@@ -433,6 +440,9 @@ public final class ApiDtos {
 
         public String getLastSuccessAt() { return lastSuccessAt; }
         public void setLastSuccessAt(String lastSuccessAt) { this.lastSuccessAt = lastSuccessAt; }
+
+        public String getNextRunAt() { return nextRunAt; }
+        public void setNextRunAt(String nextRunAt) { this.nextRunAt = nextRunAt; }
     }
 
     public static class LastRunInfo {

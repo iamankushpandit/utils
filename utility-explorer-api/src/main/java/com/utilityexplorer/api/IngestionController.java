@@ -32,4 +32,21 @@ public class IngestionController {
             "message", "Ingestion dispatched."
         ));
     }
+
+    @PostMapping("/run/{sourceId}")
+    public ResponseEntity<Map<String, String>> runNowForSource(@PathVariable String sourceId) {
+        IngestionDispatcher dispatcher = dispatcherProvider.getIfAvailable();
+        if (dispatcher == null) {
+            return ResponseEntity.status(409).body(Map.of(
+                "status", "disabled",
+                "message", "Ingestion is disabled. Set INGESTION_DISPATCHER_ENABLED=true to enable."
+            ));
+        }
+
+        dispatcher.runOnceForSource(sourceId);
+        return ResponseEntity.ok(Map.of(
+            "status", "started",
+            "message", "Ingestion dispatched for " + sourceId
+        ));
+    }
 }

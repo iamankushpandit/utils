@@ -17,6 +17,9 @@ public class CatalogService {
     
     @Autowired
     private SourceRepository sourceRepository;
+
+    @Autowired
+    private FactValueRepository factValueRepository;
     
     public List<MetricDto> getAllMetrics() {
         return metricRepository.findAll().stream()
@@ -47,13 +50,18 @@ public class CatalogService {
     
     private MetricDto toMetricDto(Metric metric) {
         List<String> geoLevels = Arrays.asList(metric.getSupportedGeoLevels().split(","));
+        List<String> sourceIds = factValueRepository.findDistinctSourceIdsByMetric(metric.getMetricId());
+        if (sourceIds == null) {
+            sourceIds = List.of();
+        }
         return new MetricDto(
             metric.getMetricId(),
             metric.getName(),
             metric.getUnit(),
             metric.getDescription(),
             metric.getDefaultGranularity(),
-            geoLevels
+            geoLevels,
+            sourceIds
         );
     }
     

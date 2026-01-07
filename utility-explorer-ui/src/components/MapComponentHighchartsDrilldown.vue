@@ -44,14 +44,10 @@ import { apiService } from '../services/api.js'
 
 HighchartsMap(Highcharts)
 HighchartsDrilldown(Highcharts)
-Highcharts.setOptions({
-  chart: { animation: false },
-  plotOptions: { series: { animation: false } },
-  drilldown: { animation: false }
-})
 
 export default {
   name: 'MapComponent',
+  emits: ['regionClick'],
   emits: ['regionClick'],
   props: {
     mapData: {
@@ -98,16 +94,25 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.onResize)
-    this.destroyChart()
+    if (this.chart) {
+      this.chart.destroy()
+      this.chart = null
+    }
   },
   methods: {
     renderChart() {
-      if (!this.mapData) {
-        this.destroyChart()
-        return
-      }
+      this.onMapDataChange()
+    },
+
+    onMapDataChange() {
+      if (!this.mapData) return
       this.updateLegendFromMapData()
-      this.renderStateMap()
+      const level = this.mapData.geoLevel || this.geoLevel || 'STATE'
+      if (level === 'COUNTY' && this.focusStateFips) {
+        this.renderCountyMap()
+      } else {
+        this.renderStateMap()
+      }
     },
 
     updateLegendFromMapData() {
@@ -138,11 +143,7 @@ export default {
 
     destroyChart() {
       if (this.chart) {
-        try {
-          this.chart.destroy()
-        } catch (err) {
-          console.warn('Highcharts destroy failed (ignored):', err)
-        }
+        this.chart.destroy()
         this.chart = null
       }
     },
@@ -180,8 +181,7 @@ export default {
           map: usStatesMap,
           backgroundColor: 'transparent',
           spacing: [0, 0, 0, 0],
-          events: chartEvents,
-          animation: false
+          events: chartEvents
         },
         accessibility: { enabled: false },
         title: { text: null },
@@ -204,9 +204,6 @@ export default {
           max: legend.max ?? 0,
           minColor: '#1a8a7a',
           maxColor: '#f0b44f'
-        },
-        plotOptions: {
-          series: { animation: false }
         },
         series: [
           {
@@ -304,8 +301,7 @@ export default {
         chart: {
           map: countyGeoJson,
           backgroundColor: 'transparent',
-          spacing: [0, 0, 0, 0],
-          animation: false
+          spacing: [0, 0, 0, 0]
         },
         accessibility: { enabled: false },
         mapView: this.buildMapView('COUNTY', stateFips),
@@ -329,9 +325,6 @@ export default {
           max: legend.max ?? 0,
           minColor: '#1a8a7a',
           maxColor: '#f0b44f'
-        },
-        plotOptions: {
-          series: { animation: false }
         },
         series: [
           {

@@ -69,6 +69,29 @@ public class IngestionDispatcher {
     public void runOnce() {
         dispatchIngestion();
     }
+
+    public void runOnceForSource(String sourceId) {
+        if (sourceId == null || sourceId.isBlank()) {
+            return;
+        }
+        Instant now = Instant.now();
+        for (SourcePlugin plugin : sourcePlugins) {
+            if (!sourceId.equalsIgnoreCase(plugin.getSourceId())) {
+                continue;
+            }
+            try {
+                if (acquireLock(plugin.getSourceId())) {
+                    logger.info("Running ingestion for source {}", plugin.getSourceId());
+                    runIngestion(plugin, now);
+                }
+            } catch (Exception e) {
+                logger.error("Ingestion failed for {}: {}", plugin.getSourceId(), e.getMessage());
+            } finally {
+                releaseLock(plugin.getSourceId());
+            }
+            break;
+        }
+    }
     
     private boolean acquireLock(String sourceId) {
         try {

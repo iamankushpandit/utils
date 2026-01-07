@@ -18,6 +18,16 @@ public interface FactValueRepository extends JpaRepository<FactValue, FactValueI
                                @Param("geoLevel") String geoLevel,
                                @Param("periodStart") LocalDate periodStart,
                                @Param("periodEnd") LocalDate periodEnd);
+
+    @Query("SELECT f FROM FactValue f WHERE f.metricId = :metricId AND f.sourceId = :sourceId " +
+           "AND f.geoLevel = :geoLevel AND f.geoId LIKE CONCAT(:geoIdPrefix, '%') " +
+           "AND f.periodStart = :periodStart AND f.periodEnd = :periodEnd")
+    List<FactValue> findMapDataByPrefix(@Param("metricId") String metricId,
+                                       @Param("sourceId") String sourceId,
+                                       @Param("geoLevel") String geoLevel,
+                                       @Param("geoIdPrefix") String geoIdPrefix,
+                                       @Param("periodStart") LocalDate periodStart,
+                                       @Param("periodEnd") LocalDate periodEnd);
     
     @Query("SELECT f FROM FactValue f WHERE f.metricId = :metricId AND f.sourceId = :sourceId " +
            "AND f.geoLevel = :geoLevel AND f.geoId = :geoId " +
@@ -28,4 +38,7 @@ public interface FactValueRepository extends JpaRepository<FactValue, FactValueI
                                   @Param("geoId") String geoId,
                                   @Param("from") LocalDate from,
                                   @Param("to") LocalDate to);
+
+    @Query("SELECT DISTINCT f.sourceId FROM FactValue f WHERE f.metricId = :metricId")
+    List<String> findDistinctSourceIdsByMetric(@Param("metricId") String metricId);
 }

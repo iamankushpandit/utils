@@ -75,6 +75,15 @@
                   <div class="run-time">{{ formatTimestamp(source.lastRun.startedAt) }}</div>
                 </div>
                 <span v-else class="no-runs">No runs yet</span>
+                <div class="row-actions">
+                  <button
+                    class="run-now-mini"
+                    :disabled="runningSource === source.sourceId"
+                    @click="runNowSource(source.sourceId)"
+                  >
+                    {{ runningSource === source.sourceId ? 'Running...' : 'Run now' }}
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -115,7 +124,8 @@ export default {
       error: null,
       running: false,
       runMessage: null,
-      runMessageTone: 'info'
+      runMessageTone: 'info',
+      runningSource: null
     }
   },
   async mounted() {
@@ -158,6 +168,26 @@ export default {
         this.runMessageTone = 'error'
       } finally {
         this.running = false
+      }
+    },
+
+    async runNowSource(sourceId) {
+      if (!sourceId) return
+      try {
+        this.runningSource = sourceId
+        this.runMessage = null
+        this.runMessageTone = 'info'
+
+        const result = await apiService.runIngestionForSource(sourceId)
+        this.runMessage = result.message || `Ingestion dispatched for ${sourceId}.`
+        this.runMessageTone = result.status === 'disabled' ? 'warning' : 'success'
+
+        await this.loadStatus()
+      } catch (error) {
+        this.runMessage = error.response?.data?.message || error.message
+        this.runMessageTone = 'error'
+      } finally {
+        this.runningSource = null
       }
     },
     
