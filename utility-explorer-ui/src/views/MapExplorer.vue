@@ -88,6 +88,7 @@ export default {
     RegionDrawer
   },
   data() {
+    const mapSearchYears = Number(import.meta.env.VITE_MAP_SEARCH_YEARS || 15)
     return {
       metrics: [],
       sources: [],
@@ -98,7 +99,8 @@ export default {
       errorByKey: {},
       periodByKey: {},
       drawerOpen: false,
-      selectedRegion: null
+      selectedRegion: null,
+      mapSearchYears
     }
   },
   computed: {
@@ -163,6 +165,7 @@ export default {
       const now = new Date()
       let fallback = null
       let fallbackPeriod = null
+      const yearsToSearch = this.mapSearchYears > 0 ? this.mapSearchYears : 15
 
       // Helper to fetch and short-circuit on first hit
       const tryPeriod = async (period) => {
@@ -182,20 +185,20 @@ export default {
         return { hit: false }
       }
 
-      if (granularity === 'YEAR') {
-        const currentYear = now.getFullYear()
-        for (let yr = currentYear; yr >= currentYear - 10; yr--) {
-          const attempt = await tryPeriod(String(yr))
-          if (attempt.hit) return attempt
-        }
-      } else {
-        // Month-level fallback (default)
-        for (let i = 0; i <= 60; i++) {
-          const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-          const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-          const attempt = await tryPeriod(period)
-          if (attempt.hit) return attempt
-        }
+      // Prefer yearly periods for map display, search a broader window to cover older latest data
+      const currentYear = now.getFullYear()
+      for (let yr = currentYear; yr >= currentYear - yearsToSearch; yr--) {
+        const attempt = await tryPeriod(String(yr))
+        if (attempt.hit) return attempt
+      }
+
+      // Fallback to monthly search (up to configured window) if no yearly data found
+      const monthsToSearch = yearsToSearch * 12
+      for (let i = 0; i <= monthsToSearch - 1; i++) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        const attempt = await tryPeriod(period)
+        if (attempt.hit) return attempt
       }
 
       return { mapData: fallback, periodLabel: fallbackPeriod || 'Unknown' }

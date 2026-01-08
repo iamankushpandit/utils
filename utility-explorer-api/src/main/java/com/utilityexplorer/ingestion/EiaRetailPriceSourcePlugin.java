@@ -35,6 +35,8 @@ public class EiaRetailPriceSourcePlugin implements SourcePlugin {
 
     @Value("${EIA_API_KEY:}")
     private String apiKey;
+    @Value("${EIA_MONTHS_BACK:72}")
+    private int monthsBack;
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -62,7 +64,8 @@ public class EiaRetailPriceSourcePlugin implements SourcePlugin {
         }
 
         YearMonth end = YearMonth.from(LocalDate.now(ctx.clock));
-        YearMonth start = end.minusMonths(59);
+        int window = Math.max(1, monthsBack);
+        YearMonth start = end.minusMonths(window - 1);
 
         URI requestUri = buildRequestUri(start, end);
         HttpRequest request = HttpRequest.newBuilder()

@@ -22,11 +22,32 @@ public class StatusService {
     
     @Autowired
     private SourceRunRepository sourceRunRepository;
+
+    @Autowired
+    private MetricRepository metricRepository;
+
+    @Autowired
+    private FactValueRepository factValueRepository;
     
     public List<SourceStatusResponse> getSourcesStatus() {
         return sourceRepository.findAll().stream()
             .map(this::buildSourceStatus)
             .toList();
+    }
+
+    public List<MetricStatusResponse> getMetricStatuses() {
+        List<SourceStatusResponse> sourceStatuses = getSourcesStatus();
+        return metricRepository.findAll().stream().map(metric -> {
+            List<String> sourceIds = factValueRepository.findDistinctSourceIdsByMetric(metric.getMetricId());
+            List<SourceStatusResponse> relevantSources = sourceStatuses.stream()
+                .filter(s -> sourceIds.contains(s.getSourceId()))
+                .toList();
+            return new MetricStatusResponse(
+                metric.getMetricId(),
+                metric.getName(),
+                relevantSources
+            );
+        }).toList();
     }
     
     private SourceStatusResponse buildSourceStatus(Source source) {

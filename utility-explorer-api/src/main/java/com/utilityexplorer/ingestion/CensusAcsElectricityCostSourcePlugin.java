@@ -56,11 +56,14 @@ public class CensusAcsElectricityCostSourcePlugin implements SourcePlugin {
     @Value("${CENSUS_API_KEY:}")
     private String apiKey;
 
-    @Value("${CENSUS_ACS_MAX_YEAR:2023}")
+    @Value("${CENSUS_ACS_MAX_YEAR:#{T(java.time.Year).now().value}}")
     private int maxYear;
-
-    @Value("${CENSUS_ACS_MIN_YEAR:2019}")
+    
+    @Value("${CENSUS_ACS_MIN_YEAR:#{T(java.time.Year).now().value - 5}}")
     private int minYear;
+    
+    @Value("${CENSUS_ACS_YEARS_BACK:6}")
+    private int yearsBack;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
         .followRedirects(HttpClient.Redirect.NORMAL)
@@ -94,8 +97,9 @@ public class CensusAcsElectricityCostSourcePlugin implements SourcePlugin {
         }
 
         int currentYear = LocalDate.now(ctx.clock).getYear();
-        int endYear = Math.min(currentYear - 1, maxYear);
-        int startYear = Math.max(minYear, endYear - 4);
+        int preferredEnd = Math.min(currentYear - 1, maxYear);
+        int endYear = findLatestAvailableYear(preferredEnd);
+        int startYear = Math.max(minYear, endYear - yearsBack);
 
         if (startYear > endYear) {
             logger.warn("Configured ACS year range is invalid (start: {}, end: {}). Nothing to ingest.", startYear, endYear);
@@ -115,6 +119,39 @@ public class CensusAcsElectricityCostSourcePlugin implements SourcePlugin {
         return new IngestResult(rows, UUID.randomUUID(), rows == 0);
     }
 
+    private int findLatestAvailableYear(int preferredEnd) {
+        int earliest = Math.max(1990, minYear); // guardrails to avoid runaway loops
+
+        for (int year = preferredEnd; year >= earliest; year--) {
+            try {
+                URI uri = buildRequestUri(year, "STATE");
+                HttpRequest request = HttpRequest.newBuilder()
+                    .uri(uri)
+                    .GET()
+                    .build();
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() == 404 || response.statusCode() == 400) {
+                    continue; // not published yet
+                }
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    JsonNode root = objectMapper.readTree(response.body());
+                    if (root.isArray() && root.size() > 1) {
+                        logger.info("Detected latest available ACS year from API: {}", year);
+                        return year;
+                    }
+                } else {
+                    logger.warn("Census API probe for year {} returned status {}", year, response.statusCode());
+                }
+            } catch (Exception ex) {
+                logger.warn("Failed probe for ACS year {}: {}", year, ex.getMessage());
+            }
+        }
+
+        logger.warn("Could not detect a published ACS year; falling back to preferred end year {}", preferredEnd);
+        return preferredEnd;
+    }
+
     private int ingestYear(SourceContext ctx, SourceCheckResult check, int year, String geoLevel) throws Exception {
         URI requestUri = buildRequestUri(year, geoLevel);
         HttpRequest request = HttpRequest.newBuilder()
@@ -123,7 +160,7 @@ public class CensusAcsElectricityCostSourcePlugin implements SourcePlugin {
             .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() == 404) {
+        if (response.statusCode() == 404 || response.statusCode() == 400) {
             logger.warn("ACS data not published for year {} and geo level {}, skipping", year, geoLevel);
             return 0;
         }

@@ -445,6 +445,29 @@ public final class ApiDtos {
         public void setNextRunAt(String nextRunAt) { this.nextRunAt = nextRunAt; }
     }
 
+    public static class MetricStatusResponse {
+        private String metricId;
+        private String metricName;
+        private List<SourceStatusResponse> sources;
+
+        public MetricStatusResponse() {}
+
+        public MetricStatusResponse(String metricId, String metricName, List<SourceStatusResponse> sources) {
+            this.metricId = metricId;
+            this.metricName = metricName;
+            this.sources = sources;
+        }
+
+        public String getMetricId() { return metricId; }
+        public void setMetricId(String metricId) { this.metricId = metricId; }
+
+        public String getMetricName() { return metricName; }
+        public void setMetricName(String metricName) { this.metricName = metricName; }
+
+        public List<SourceStatusResponse> getSources() { return sources; }
+        public void setSources(List<SourceStatusResponse> sources) { this.sources = sources; }
+    }
+
     public static class LastRunInfo {
         private String runId;
         private String status;

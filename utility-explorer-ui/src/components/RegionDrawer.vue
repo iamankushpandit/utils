@@ -67,12 +67,16 @@ export default {
     }
   },
   data() {
+    const displayYears = Number(import.meta.env.VITE_DISPLAY_YEARS || 6)
+    const requestWindowYears = Number(import.meta.env.VITE_TIME_WINDOW_YEARS || Math.max(10, displayYears + 4))
     return {
       timeSeriesData: null,
       loading: false,
       error: null,
       chart: null,
-      exporting: false
+      exporting: false,
+      displayYears,
+      requestWindowYears
     }
   },
   watch: {
@@ -112,7 +116,14 @@ export default {
           to
         }
 
-        this.timeSeriesData = await apiService.getTimeSeries(params)
+        const raw = await apiService.getTimeSeries(params)
+
+        // Aggregate to yearly averages for charting and keep last 6 years of available data
+        const aggregated = this.aggregateByYear(raw?.points || [])
+        this.timeSeriesData = {
+          ...raw,
+          points: aggregated
+        }
 
         // Wait for next tick to ensure canvas is rendered
         this.$nextTick(() => {
@@ -247,18 +258,55 @@ export default {
     },
 
     getDateRange() {
-      if (this.metricMeta?.defaultGranularity === 'YEAR') {
-        const endYear = new Date().getFullYear() - 1
-        const startYear = endYear - 4
-        const from = `${startYear}-01-01`
-        const to = `${endYear}-12-31`
-        return { from, to }
-      }
-      const end = new Date()
-      const start = new Date(end.getFullYear(), end.getMonth() - 11, 1)
-      const from = start.toISOString().slice(0, 10)
-      const to = new Date(end.getFullYear(), end.getMonth() + 1, 0).toISOString().slice(0, 10)
+      const endYear = new Date().getFullYear()
+      const windowYears = this.requestWindowYears > 0 ? this.requestWindowYears : 10
+      const startYear = endYear - (windowYears - 1)
+      const from = `${startYear}-01-01`
+      const to = `${endYear}-12-31`
       return { from, to }
+    },
+
+    aggregateByYear(points) {
+      if (!points?.length) return []
+      const buckets = {}
+      points.forEach((p) => {
+        const year = this.extractYear(p.periodStart)
+        if (!year) return
+        if (!buckets[year]) {
+          buckets[year] = { sum: 0, count: 0, latest: p }
+        }
+        buckets[year].sum += Number(p.value)
+        buckets[year].count += 1
+        const currLatest = buckets[year].latest
+        if (!currLatest?.retrievedAt || (p.retrievedAt && p.retrievedAt > currLatest.retrievedAt)) {
+          buckets[year].latest = p
+        }
+      })
+      return Object.entries(buckets)
+        .map(([year, bucket]) => {
+          const avg = bucket.count ? bucket.sum / bucket.count : null
+          return {
+            ...bucket.latest,
+            periodStart: `${year}-01-01`,
+            periodEnd: `${year}-12-31`,
+            value: avg
+          }
+        })
+        .sort((a, b) => this.extractYear(a.periodStart) - this.extractYear(b.periodStart))
+        .filter((p, _, arr) => {
+          const maxYear = arr.length ? this.extractYear(arr[arr.length - 1].periodStart) : null
+          if (!maxYear) return true
+          const yr = this.extractYear(p.periodStart)
+          const yearsToKeep = this.displayYears > 0 ? this.displayYears : 6
+          return yr >= maxYear - (yearsToKeep - 1)
+        })
+    },
+
+    extractYear(dateString) {
+      if (!dateString) return null
+      const y = String(dateString).slice(0, 4)
+      const n = Number(y)
+      return Number.isFinite(n) ? n : null
     }
   },
 

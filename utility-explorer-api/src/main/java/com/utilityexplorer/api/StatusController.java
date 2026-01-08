@@ -22,4 +22,10 @@ public class StatusController {
     public List<SourceStatusResponse> getSourcesStatus() {
         return statusService.getSourcesStatus();
     }
+
+    @GetMapping("/metrics")
+    @Operation(summary = "Get metric ingestion statuses (aggregated from sources)")
+    public List<MetricStatusResponse> getMetricsStatus() {
+        return statusService.getMetricStatuses();
+    }
 }

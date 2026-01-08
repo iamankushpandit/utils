@@ -37,6 +37,7 @@ Swagger UI is available when the API runs with the SpringDoc starter: open `/swa
 ### Environment Variables (minimum)
 - **UI:** `VITE_API_BASE_URL` (default `http://localhost:8080/api/v1`).
 - **API:** `EIA_API_KEY`, `CENSUS_API_KEY`, DB settings (`DB_URL`, `DB_USER`, `DB_PASS`), `INGESTION_DISPATCHER_ENABLED`, optional `SERVER_PORT`, CORS allowed origins, log level.
+- **History windows:** `EIA_MONTHS_BACK` (default 72 months), `CENSUS_ACS_MIN_YEAR`/`CENSUS_ACS_MAX_YEAR` (defaults now-5 .. now) to pull 6 years of ACS.
 - Keep `.env` out of git; use secret managers in cloud.
 
 ### Data Model (conceptual)
