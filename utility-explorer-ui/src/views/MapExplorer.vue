@@ -159,6 +159,10 @@ export default {
       }
     },
 
+    /**
+     * Attempts to load the freshest map period by checking yearly snapshots (configurable lookback)
+     * before falling back to monthly data. Stores a fallback map in case nothing is found.
+     */
     async fetchBestMap(metricId, sourceId) {
       const metric = this.metrics.find((m) => m.metricId === metricId)
       const granularity = metric?.defaultGranularity || 'MONTH'

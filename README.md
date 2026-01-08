@@ -203,3 +203,25 @@ If you choose to monetize, keep the base experience free and layer value-adds: g
 - API dev: run Spring Boot locally with DB; use `.env.template` to fill keys; keep `.env` out of git.  
 - Tests: run unit/integration before PRs; seed minimal data for E2E map smoke.  
 - Contributions: follow existing patterns; avoid committing secrets; keep PRs small and reviewed.
+
+## Documentation & Code Comments
+- **Frontend:** key components (`MapExplorer.vue`, `RegionDrawer.vue`, `MapComponent.vue`) include inline comments near fetch logic, drilldown handling, and UI windows. They explain period selection, aggregation rules, and drilldown fallbacks so new devs can tune display windows via `VITE_DISPLAY_YEARS`, `VITE_MAP_SEARCH_YEARS`, etc. Keep comments up to date when changing map behavior or time ranges.
+- **Backend:** ingestion plugins (`CensusAcsElectricityCostSourcePlugin`, `EiaRetailPriceSourcePlugin`) include explanatory comments about weighting buckets, API probing, and guardrails. When adding new sources or metrics, document which `FactValue` columns are populated and how `SourceContext` timestamps propagate.
+
+## Swagger & OpenAPI Delivery
+Swagger UI is published by Springdoc at `http://localhost:8081/swagger-ui/index.html` (also `/swagger-ui.html`); the JSON spec lives at `/v3/api-docs`. Use this for live contract validation, sample payloads, and ingestion triggers. In production, toggle exposure or protect it behind auth to avoid public discovery.
+
+## Onboarding Checklist (doc-focused)
+1. Copy `.env.template` to `.env` in both API and UI directories.  
+2. Populate secrets: `EIA_API_KEY`, `CENSUS_API_KEY`, database credentials, `VITE_API_BASE_URL`.  
+3. Validate data ranges: EIA returns 72 months by default; ACS defaults to the latest available year minus 6 lookback (configurable via `CENSUS_ACS_YEARS_BACK`). Document any gaps (e.g., ACS 2017-2019 might be unpublished) and adjust `CENSUS_ACS_MIN_YEAR` accordingly.  
+4. Start Postgres container (`docker-compose up utils-postgres-1`); ensure `DB_HOST` points to it (`localhost` for local runs).  
+5. Start API (`mvn -Dmaven.test.skip=true spring-boot:run`) and UI (`npm run dev -- --host 0.0.0.0 --port 5173`).  
+6. Verify Swagger page, `/metrics`, `/sources`, `/status/sources`, and sample map responses before sharing with stakeholders.
+
+## Architecture & Lifecycle Notes (for Prod readiness)
+- **Ingress**: Dispatcher reads enabled plugins and triggers them on schedule; they fetch upstream, validate status codes, compute `FactValue` entries, and log metrics.  
+- **Persistence**: facts store `retrievedAt`, `sourcePublishedAt`, `isAggregated`, and `aggregationMethod`. Regions have FIPS parents for drilldown.  
+- **UI Flow**: metric tabs → per-source cards → `MapComponent` fetches best year/month, renders Highcharts map, and emits region clicks to `RegionDrawer`. Drawer aggregates time series into yearly buckets and exports CSV.  
+- **Telemetry**: logs include ingestion events, missing legend warnings, and map fetch fallbacks; add structured logging / metrics in prod to monitor latency/errors.  
+- **Swagger**: used for onboarding new consumers—document ingestion control endpoints and map queries for partners wanting embed or API access.

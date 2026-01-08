@@ -257,6 +257,10 @@ export default {
       return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
     },
 
+    /**
+     * Builds the query window that is sent to the API so that we can guarantee a six-year snapshot
+     * even when the latest data is older.
+     */
     getDateRange() {
       const endYear = new Date().getFullYear()
       const windowYears = this.requestWindowYears > 0 ? this.requestWindowYears : 10

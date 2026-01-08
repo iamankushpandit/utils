@@ -26,6 +26,11 @@ import java.util.Map;
 import java.util.UUID;
 
 @Component
+/**
+ * Fetches the ACS cost bins and stores weighted averages per STATE/COUNTY/PLACE.
+ * It probes the Census API to discover the freshest year, then backfills the configured
+ * {@code CENSUS_ACS_YEARS_BACK} window while respecting {@code CENSUS_ACS_MIN_YEAR}.
+ */
 public class CensusAcsElectricityCostSourcePlugin implements SourcePlugin {
 
     private static final Logger logger = LoggerFactory.getLogger(CensusAcsElectricityCostSourcePlugin.class);
@@ -119,6 +124,10 @@ public class CensusAcsElectricityCostSourcePlugin implements SourcePlugin {
         return new IngestResult(rows, UUID.randomUUID(), rows == 0);
     }
 
+    /**
+     * Probes the Census API for the latest published year (per the STATE endpoint).
+     * Falls back to the configured preferred end if nothing new is published.
+     */
     private int findLatestAvailableYear(int preferredEnd) {
         int earliest = Math.max(1990, minYear); // guardrails to avoid runaway loops
 
