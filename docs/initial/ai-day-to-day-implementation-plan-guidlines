@@ -298,13 +298,13 @@ Because web access/licensing can be tricky, keep Day 9 purely “source intake�
 
 ---
 
-# Day 13 — Copilot v1 (read-only, minimal)
+# Day 13 — Util Agent v1 (read-only, minimal)
 
 ### Feed the AI
 
 * `PROJECT_STATE.md`
-* Copilot rules (short)
-* OpenAPI `/copilot/query`
+* Util Agent rules (short)
+* OpenAPI `/util-agent/query`
 * `TODAY_TASK.md`:
 
   * Implement API key check

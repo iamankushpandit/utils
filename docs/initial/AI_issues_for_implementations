@@ -40,7 +40,7 @@ Example structure:
 * Phase 2: map + timeseries endpoints (return provenance)
 * Phase 3: UI map + drawer + chart + status page
 * Phase 4: ingestion framework + one source plugin
-* Phase 5: Copilot QuerySpec validator + 1 query type
+* Phase 5: Util Agent QuerySpec validator + 1 query type
 * Phase 6: hardening + docs + polish
 
 **Gate rule:** AI cannot start Phase N+1 until Phase N validation checks pass.
@@ -150,7 +150,7 @@ AI might accidentally enable expensive behaviors (e.g., frequent jobs).
 Add config kill switches:
 
 * `INGESTION_ENABLED=false`
-* `COPILOT_ENABLED=false`
+* `UTIL_AGENT_ENABLED=false`
 * `ADS_ENABLED=false`
 * `EXPORTS_ENABLED=true/false`
 * per-source `enabled=false` in DB
@@ -225,7 +225,7 @@ Even with AI autonomy, define a few “human signoff” checkpoints:
 * Metric catalog definitions (product decisions)
 * Source terms/licensing approval
 * “Latest common period” policy
-* Copilot strictness policy (partial results yes/no)
+* Util Agent strictness policy (partial results yes/no)
 * Ads/billing changes
 
 Everything else AI can do.

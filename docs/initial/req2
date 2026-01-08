@@ -3,7 +3,7 @@
 
 > **Purpose:** A map-first, transparency-first dashboard and API that visualizes **free public utility-related datasets** (electricity, broadband, water, wastewater) with provenance.  
 > **Key constraints:** **No ads. No forecasting. No imputation. No hidden blending.** If data isn’t available at a geography/time, we show **“No data available.”**  
-> **Tech:** Vue.js UI + Java Spring Boot API + Postgres + periodic ingestion jobs with **source-specific cadence** + read-only Copilot for cross-layer questions.
+> **Tech:** Vue.js UI + Java Spring Boot API + Postgres + periodic ingestion jobs with **source-specific cadence** + read-only Util Agent for cross-layer questions.
 
 ---
 
@@ -36,12 +36,12 @@
 - **Vue UI**
   - Map (choropleth) + drilldown boundaries + timeseries chart
   - Transparency page (static ideology) + dynamic data status widget
-  - Read-only Copilot query bar
+  - Read-only Util Agent query bar
 
 - **Spring Boot API**
   - Serves metrics catalog, sources, coverage, map data, time series, exports
   - Runs ingestion dispatcher + source plugins
-  - Read-only Copilot (QuerySpec → validated → SQL → results)
+  - Read-only Util Agent (QuerySpec → validated → SQL → results)
 
 - **Postgres**
   - Facts, provenance, source runs, raw payload references, geo metadata
@@ -56,7 +56,7 @@
 |   Vue Frontend    | <---------------> |    Spring Boot API       |
 |  (static hosting) |                   |  - /map /timeseries      |
 |                   |                   |  - /metrics /sources     |
-|                   |                   |  - /copilot (read-only)  |
+|                   |                   |  - /util-agent (read-only)  |
 +---------+---------+                   |  - ingestion dispatcher  |
           |                             +-----------+-------------+
           |                                         |
@@ -114,10 +114,10 @@ Run everything locally with Docker Compose:
 
 ## 3) Key Design Decisions (and Why)
 
-### D1: **Map-first UI + Read-only Copilot**
+### D1: **Map-first UI + Read-only Util Agent**
 
 * Decision makers trust visuals; map answers “where” quickly.
-* Copilot adds “ask questions” without becoming a source of truth.
+* Util Agent adds “ask questions” without becoming a source of truth.
 
 ### D2: **Canonical Geography IDs**
 
@@ -133,7 +133,7 @@ Each source has its own schedule (monthly/release-based/event-driven).
 
 ### D4: **QuerySpec (not LLM → SQL)**
 
-Copilot produces structured QuerySpec JSON; server validates and generates SQL.
+Util Agent produces structured QuerySpec JSON; server validates and generates SQL.
 **Reason:** Safety, explainability, testability, and no hallucinated queries.
 
 ---
@@ -379,9 +379,9 @@ public final class IngestResult {
 
 * `GET /api/v1/status/sources`
 
-**Copilot**
+**Util Agent**
 
-* `POST /api/v1/copilot/query` (read-only)
+* `POST /api/v1/util-agent/query` (read-only)
 
 ### 6.3 Example Response Payloads
 
@@ -484,9 +484,9 @@ public final class IngestResult {
 
 ---
 
-## 7) Read-Only Copilot — LLD
+## 7) Read-Only Util Agent — LLD
 
-### 7.1 What Copilot Can Do (MVP)
+### 7.1 What Util Agent Can Do (MVP)
 
 * Rank: “Top 10 states by electricity price in Dec 2025”
 * Filter: “States where broadband served% < 70”
@@ -495,14 +495,14 @@ public final class IngestResult {
 
 ### 7.2 Hard Rules
 
-* **Read-only**: Copilot cannot modify DB.
+* **Read-only**: Util Agent cannot modify DB.
 * **No guessing**: if required data is missing, return “Insufficient data”.
 * **Always cite** sources and timestamps.
 * **Explain period alignment** (e.g., “latest common period”).
 
 ### 7.3 QuerySpec JSON Schema (Draft)
 
-Copilot produces this; server validates it and generates SQL.
+Util Agent produces this; server validates it and generates SQL.
 
 ```json
 {
@@ -538,7 +538,7 @@ Copilot produces this; server validates it and generates SQL.
 * `LATEST_COMMON` must find a period where all metric+source combos have data
 * If no data: return `INSUFFICIENT_DATA` response (no partial truth unless user asks for partial)
 
-### 7.5 Copilot Endpoint Response (Example)
+### 7.5 Util Agent Endpoint Response (Example)
 
 ```json
 {
@@ -586,7 +586,7 @@ Copilot produces this; server validates it and generates SQL.
   * `MapView`
   * `Legend` (must show retrieved timestamps + source)
   * `RegionDrawer` (details + chart + export)
-  * `CopilotPanel` (read-only)
+  * `UtilAgentPanel` (read-only)
 
 ### 8.3 Choropleth Rendering Rules
 
@@ -630,8 +630,8 @@ The transparency page must contain:
 * `FLYWAY_ENABLED=true`
 * `INGESTION_DISPATCHER_ENABLED=true`
 * `INGESTION_TICK_SECONDS=600`
-* `COPILOT_ENABLED=true`
-* `COPILOT_API_KEY=change_me` (MVP simple)
+* `UTIL_AGENT_ENABLED=true`
+* `UTIL_AGENT_API_KEY=change_me` (MVP simple)
 * `CORS_ALLOWED_ORIGINS=http://localhost:5173`
 
 Optional:
@@ -665,8 +665,8 @@ FLYWAY_ENABLED=true
 INGESTION_DISPATCHER_ENABLED=true
 INGESTION_TICK_SECONDS=600
 
-COPILOT_ENABLED=true
-COPILOT_API_KEY=dev_key_change_me
+UTIL_AGENT_ENABLED=true
+UTIL_AGENT_API_KEY=dev_key_change_me
 CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 RAW_PAYLOAD_STORAGE_DIR=/data/raw
@@ -708,8 +708,8 @@ services:
       INGESTION_DISPATCHER_ENABLED: ${INGESTION_DISPATCHER_ENABLED}
       INGESTION_TICK_SECONDS: ${INGESTION_TICK_SECONDS}
 
-      COPILOT_ENABLED: ${COPILOT_ENABLED}
-      COPILOT_API_KEY: ${COPILOT_API_KEY}
+      UTIL_AGENT_ENABLED: ${UTIL_AGENT_ENABLED}
+      UTIL_AGENT_API_KEY: ${UTIL_AGENT_API_KEY}
 
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
       RAW_PAYLOAD_STORAGE_DIR: ${RAW_PAYLOAD_STORAGE_DIR}
@@ -791,7 +791,7 @@ volumes:
 
 ## 14) Security (MVP Baseline)
 
-* Copilot endpoint requires `X-API-Key`
+* Util Agent endpoint requires `X-API-Key`
 * Rate limit (basic) by IP or key (simple filter)
 * Strict CORS for production
 * Secrets only in env vars; never commit `.env`
@@ -832,7 +832,7 @@ Create `/docs/adr/`:
 * `0002-no-imputation-no-forecasting.md` — integrity rule
 * `0003-provenance-model.md` — retrieved_at/source_published_at/raw payload hash
 * `0004-source-cadence-dispatcher.md` — source schedules
-* `0005-copilot-queryspec.md` — structured queries and validation
+* `0005-util-agent-queryspec.md` — structured queries and validation
 
 ---
 
@@ -844,14 +844,14 @@ Create `/docs/adr/`:
 4. **Static boundaries** in UI + map wiring
 5. **Ingestion dispatcher framework** + one source plugin (electricity at state level)
 6. **Transparency page** + data status widget
-7. **Copilot QuerySpec + validation** + one cross-layer query type
+7. **Util Agent QuerySpec + validation** + one cross-layer query type
 
 ---
 
 ## 18) Design Summary (Why this is the right approach)
 
 * It is **trust-first**: provenance and no data invention prevent integrity questions.
-* It is **portfolio-grade**: shows modern engineering practices (12-factor, provenance, plugin ingestion, safe Copilot).
+* It is **portfolio-grade**: shows modern engineering practices (12-factor, provenance, plugin ingestion, safe Util Agent).
 * It is **cheap-first**: deployable to a single VM while remaining cloud-ready.
 * It is **SaaS-ready later**: multi-source, catalog-driven, and API-first under the hood without building billing/multi-tenancy now.
 

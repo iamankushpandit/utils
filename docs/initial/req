@@ -2,7 +2,7 @@
 
 ## 1) Summary
 
-Build a **local-first**, **cloud-ready** web application that visualizes **free public utility-related datasets** on a US map with drilldowns and historical charts. The product must be **transparent**: no ads, no forecasting, no filling gaps, no hidden blending of sources. A **read-only Copilot** can answer questions across layers using only stored facts and must always include provenance.
+Build a **local-first**, **cloud-ready** web application that visualizes **free public utility-related datasets** on a US map with drilldowns and historical charts. The product must be **transparent**: no ads, no forecasting, no filling gaps, no hidden blending of sources. A **read-only Util Agent** can answer questions across layers using only stored facts and must always include provenance.
 
 ---
 
@@ -22,7 +22,7 @@ Build a **local-first**, **cloud-ready** web application that visualizes **free 
 
   * Run on **each source’s own cadence**
   * Record run history, errors, and “no change” runs
-* **Read-only Copilot**:
+* **Read-only Util Agent**:
 
   * Cross-layer questions (e.g., “high electricity + low broadband”) using only stored data
   * Must cite provenance; must refuse when data is missing
@@ -124,7 +124,7 @@ Build a **local-first**, **cloud-ready** web application that visualizes **free 
 
    * Table: source → cadence → last success → next run → last error
 
-5. **Copilot (read-only)**
+5. **Util Agent (read-only)**
 
    * Query box + examples
    * Results:
@@ -216,9 +216,9 @@ Build a **local-first**, **cloud-ready** web application that visualizes **free 
 
   * last successful run, next scheduled run, last error
 
-#### Copilot (read-only)
+#### Util Agent (read-only)
 
-* `POST /api/v1/copilot/query`
+* `POST /api/v1/util-agent/query`
 
   * input: user question text
   * output: structured result + sources + “highlight region ids”
@@ -277,7 +277,7 @@ For every run:
 
 ---
 
-## 9) Read-only Copilot Requirements (Cross-layer)
+## 9) Read-only Util Agent Requirements (Cross-layer)
 
 ### 9.1 Capabilities
 
@@ -300,7 +300,7 @@ For every run:
 
 ### 9.3 Implementation Approach (recommended)
 
-* Copilot converts user prompt → **QuerySpec JSON**
+* Util Agent converts user prompt → **QuerySpec JSON**
 * Server validates QuerySpec with strict schema + allow-list
 * Server generates SQL (not the model)
 * Response includes region ids to highlight on the map
@@ -347,7 +347,7 @@ For every run:
   * Calls backend APIs only (no direct calls to sources)
 * **Spring Boot API**
 
-  * Serves map/time series/export/copilot endpoints
+  * Serves map/time series/export/util-agent endpoints
   * Runs ingestion dispatcher + source plugins
 * **Postgres**
 
@@ -395,7 +395,7 @@ For every run:
 ## 13) Security Requirements
 
 * No ads, no trackers by default
-* API key support (at least for Copilot and export endpoints)
+* API key support (at least for Util Agent and export endpoints)
 * Rate limiting per key/IP (lightweight)
 * CORS locked down in prod
 * Secrets never stored in git; `.env.template` only
@@ -443,7 +443,7 @@ For every run:
 * Transparency page (static) + Data Status (dynamic)
 * Ingestion dispatcher with per-source cadence
 * CSV export
-* Copilot read-only with cross-layer intersection for **state-level** metrics
+* Util Agent read-only with cross-layer intersection for **state-level** metrics
 
 ### v1.1
 
@@ -474,7 +474,7 @@ For every run:
 
   * `SUCCESS/NO_CHANGE/FAILED`
   * last success visible in UI Data Status
-* Copilot:
+* Util Agent:
 
   * read-only
   * supports cross-layer question at state level

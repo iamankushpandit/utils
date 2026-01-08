@@ -27,7 +27,7 @@ tags:
   - name: TimeSeries
   - name: Export
   - name: Status
-  - name: Copilot
+  - name: Util Agent
 
 security:
   - ApiKeyAuth: []
@@ -349,12 +349,12 @@ paths:
                 items:
                   $ref: "#/components/schemas/SourceStatus"
 
-  /copilot/query:
+  /util-agent/query:
     post:
-      tags: [Copilot]
-      summary: Read-only Copilot query (cross-layer supported)
+      tags: [Util Agent]
+      summary: Read-only Util Agent query (cross-layer supported)
       description: >
-        Copilot is strictly read-only and must return grounded results only.
+        Util Agent is strictly read-only and must return grounded results only.
         Requires API key. Server validates query shape and refuses if data is missing.
       security:
         - ApiKeyAuth: []
@@ -363,14 +363,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CopilotQueryRequest"
+              $ref: "#/components/schemas/UtilAgentQueryRequest"
       responses:
         "200":
-          description: Copilot query response
+          description: Util Agent query response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CopilotQueryResponse"
+                $ref: "#/components/schemas/UtilAgentQueryResponse"
         "401":
           description: Missing/invalid API key
           content:
@@ -390,7 +390,7 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: API key for protected endpoints (Copilot, optional exports)
+      description: API key for protected endpoints (Util Agent, optional exports)
 
   schemas:
     GeoLevel:
@@ -614,13 +614,13 @@ components:
           format: date-time
           nullable: true
 
-    CopilotQueryRequest:
+    UtilAgentQueryRequest:
       type: object
       required: [question]
       properties:
         question:
           type: string
-          description: Natural language question. Copilot is read-only and grounded.
+          description: Natural language question. Util Agent is read-only and grounded.
         preferGeoLevel:
           $ref: "#/components/schemas/GeoLevel"
         limit:
@@ -629,7 +629,7 @@ components:
           maximum: 100
           default: 10
 
-    CopilotCitation:
+    UtilAgentCitation:
       type: object
       required: [sourceId, retrievedAt]
       properties:
@@ -638,7 +638,7 @@ components:
         sourcePublishedAt: { type: string, format: date-time, nullable: true }
         termsUrl: { type: string, nullable: true }
 
-    CopilotTable:
+    UtilAgentTable:
       type: object
       required: [columns, rows]
       properties:
@@ -657,14 +657,14 @@ components:
                 - type: boolean
                 - type: "null"
 
-    CopilotHighlightRegion:
+    UtilAgentHighlightRegion:
       type: object
       required: [geoLevel, geoId]
       properties:
         geoLevel: { $ref: "#/components/schemas/GeoLevel" }
         geoId: { type: string }
 
-    CopilotQueryResponse:
+    UtilAgentQueryResponse:
       type: object
       required: [status, summary, citations]
       properties:
@@ -682,15 +682,15 @@ components:
               type: string
               enum: [EXACT_PERIOD, RANGE, LATEST_COMMON]
         table:
-          $ref: "#/components/schemas/CopilotTable"
+          $ref: "#/components/schemas/UtilAgentTable"
         highlightRegions:
           type: array
           items:
-            $ref: "#/components/schemas/CopilotHighlightRegion"
+            $ref: "#/components/schemas/UtilAgentHighlightRegion"
         citations:
           type: array
           items:
-            $ref: "#/components/schemas/CopilotCitation"
+            $ref: "#/components/schemas/UtilAgentCitation"
         notes:
           type: array
           items: { type: string }

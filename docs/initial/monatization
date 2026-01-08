@@ -226,9 +226,9 @@ Keep the public map UI mostly unchanged.
 
 **Result:** Architecture becomes monetization-ready without changing the UX.
 
-### Step 2 — Add limits for Copilot first
-Copilot is the easiest to protect because it can be resource-heavy.
-- require API key for `/copilot/query`
+### Step 2 — Add limits for Util Agent first
+Util Agent is the easiest to protect because it can be resource-heavy.
+- require API key for `/util-agent/query`
 - keep map/timeseries public
 
 **Result:** cost control without making the main product feel paywalled.
@@ -263,7 +263,7 @@ Decide what can be paid:
 - higher limits
 - scheduled exports
 - saved reports and sharing
-- Copilot heavy usage
+- Util Agent heavy usage
 
 ### 8.2 Multi-tenancy
 Even if MVP is single-tenant, monetization pushes you toward:

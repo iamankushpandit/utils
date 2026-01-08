@@ -22,8 +22,8 @@
 - Vue UI shell: routes, transparency page with status widget
 - Interactive map: Leaflet with state boundaries, choropleth coloring, click handlers
 - Region drawer: current value + provenance + time series chart + CSV export
-- Read-only Copilot: QuerySpec validation + API key auth + structured responses
-- Integration tests: Full endpoint coverage + Copilot safety verification
+- Read-only Util Agent: QuerySpec validation + API key auth + structured responses
+- Integration tests: Full endpoint coverage + Util Agent safety verification
 - Complete documentation: DEMO.md with step-by-step walkthrough
 
 ## What is agreed (non-negotiable)
@@ -41,7 +41,7 @@
 
 ## Decisions made
 - Geo levels v1: STATE, COUNTY, PLACE (Place = "city")
-- Copilot: read-only, must return grounded results, can answer cross-layer queries
+- Util Agent: read-only, must return grounded results, can answer cross-layer queries
 - Repo structure: Monorepo with utility-explorer-api and utility-explorer-ui
 - DB choice: Postgres
 

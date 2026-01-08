@@ -89,12 +89,12 @@ Consider:
 * “Scenario view” (cross-layer intersection) with transparent thresholds
 * Export formats and what columns they include (provenance columns must be in exports)
 
-## 9) Copilot scope boundaries (to prevent trust issues)
+## 9) Util Agent scope boundaries (to prevent trust issues)
 
 Even read-only can cause trust issues if it sounds too confident.
 Decide:
 
-* Copilot response tone: always shows citations, always shows “data coverage used”
+* Util Agent response tone: always shows citations, always shows “data coverage used”
 * Does it ever answer with partial data? (e.g., electricity exists but broadband missing)
 * Should it ask follow-ups or just refuse?
 * Do you want “explain how you computed this” always available?
@@ -146,6 +146,6 @@ Even if it’s portfolio-first, define:
 2. **Freshness policy**: “latest available” rules + latest common period for cross-layer
 3. **Source disagreement UX**: compare mode + how to explain differences
 4. **“City” definition**: Census Place + how it’s explained on transparency page
-5. **Copilot strictness**: intersection-only by default + optional partial toggle
+5. **Util Agent strictness**: intersection-only by default + optional partial toggle
 
 If you want, I can propose a **default set of choices** for all five (with reasoning) so you don’t have to decide from scratch—then you can adjust only what you disagree with.

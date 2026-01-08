@@ -93,7 +93,7 @@ Open: [http://localhost:5173](http://localhost:5173)
 
 ---
 
-## Step 8 — Copilot (Read-only)
+## Step 8 — Util Agent (Read-only)
 
 * On map page, scroll to "Ask Questions About the Data" section
 * Try example query: "high electricity and low broadband"
@@ -126,8 +126,8 @@ curl "http://localhost:8080/api/v1/timeseries?metricId=ELECTRICITY_RETAIL_PRICE_
 # Source status
 curl http://localhost:8080/api/v1/status/sources
 
-# Copilot (requires API key)
-curl -X POST http://localhost:8080/api/v1/copilot/query \
+# Util Agent (requires API key)
+curl -X POST http://localhost:8080/api/v1/util-agent/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: dev_key_change_me" \
   -d '{"question": "high electricity and low broadband"}'
@@ -143,7 +143,7 @@ curl -X POST http://localhost:8080/api/v1/copilot/query \
 ✅ **Interactive Map**: Choropleth coloring, hover tooltips, click-to-drill functionality  
 ✅ **Time Series**: Historical charts with provenance in tooltips  
 ✅ **Export**: CSV includes full provenance columns  
-✅ **Read-only Copilot**: Structured queries with citations and safety constraints  
+✅ **Read-only Util Agent**: Structured queries with citations and safety constraints  
 
 ---
 
@@ -153,5 +153,5 @@ curl -X POST http://localhost:8080/api/v1/copilot/query \
 * **12-factor**: All configuration via environment variables
 * **Provenance-first**: Every fact includes retrieved_at + source attribution
 * **Plugin architecture**: Extensible ingestion framework with mock plugin
-* **Safety-first Copilot**: QuerySpec validation prevents unsafe queries
+* **Safety-first Util Agent**: QuerySpec validation prevents unsafe queries
 * **No vendor lock-in**: Portable across cloud providers

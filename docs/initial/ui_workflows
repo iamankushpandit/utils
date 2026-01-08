@@ -8,7 +8,7 @@ Below are **wire (low-fidelity) UI diagrams** and **workflow paths** for the key
 +----------------------------------------------------------------------------------+
 | Utility Explorer                                   [Transparency] [Status] [Git] |
 +----------------------------------------------------------------------------------+
-| [Metric ▼] [Source ▼] [Geo Level ▼] [Period ▼]  [Compare Sources □]  [Copilot ⌄] |
+| [Metric ▼] [Source ▼] [Geo Level ▼] [Period ▼]  [Compare Sources □]  [Util Agent ⌄] |
 +----------------------------------------------------------------------------------+
 |                                                                                  |
 |   (Main Content Area: Map / Results)                                              |
@@ -171,20 +171,20 @@ This is a decision-maker friendly view that’s still transparent.
 | +------------------------------+   | Period: Latest common = Dec 2025           | |
 | Legend: “Scenario match”        |   | Included: 12 states (all metrics present) | |
 |                                 |   | Missing data: 3 states excluded           | |
-|                                 |   | [View table] [Ask Copilot]                | |
+|                                 |   | [View table] [Ask Util Agent]                | |
 |                                 |   +-------------------------------------------+ |
 +----------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 7) Workflow F — Copilot (read-only) + highlight on map
+## 7) Workflow F — Util Agent (read-only) + highlight on map
 
-### Screen: Copilot panel
+### Screen: Util Agent panel
 
 ```
 +----------------------------------------------------------------------------------+
-| Copilot (Read-only)                                                             X |
+| Util Agent (Read-only)                                                             X |
 | Ask: “Show states with high electricity price and low broadband availability”     |
 | [Submit]                                                                          |
 |----------------------------------------------------------------------------------|
@@ -203,10 +203,10 @@ This is a decision-maker friendly view that’s still transparent.
 +----------------------------------------------------------------------------------+
 ```
 
-### Copilot flow
+### Util Agent flow
 
 ```
-User opens Copilot
+User opens Util Agent
   -> asks question
   -> system returns table + citations
   -> user clicks “Highlight on map”
@@ -273,7 +273,7 @@ User opens Copilot
 ### Screen: Export action
 
 ```
-From Region Drawer or Copilot result:
+From Region Drawer or Util Agent result:
   [Export CSV] -> modal confirmation
 
 +-----------------------------+

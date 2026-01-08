@@ -35,7 +35,7 @@
 ## Error Handling
 - **Ingestion failures**: Record in source_run table with error_summary
 - **Missing data**: Return structured "No data available" responses
-- **Copilot safety**: Validate QuerySpec, refuse unsafe/incomplete queries
+- **Util Agent safety**: Validate QuerySpec, refuse unsafe/incomplete queries
 
 ## Performance Considerations
 - **Caching**: Map responses by (metric, source, geoLevel, parent, period)

@@ -1,6 +1,6 @@
 package com.utilityexplorer.api;
 
-import com.utilityexplorer.copilot.CopilotService;
+import com.utilityexplorer.utilagent.UtilAgentService;
 import com.utilityexplorer.dto.ApiDtos.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,21 +13,21 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/copilot")
-@ConditionalOnProperty(name = "COPILOT_ENABLED", havingValue = "true")
-@Tag(name = "Copilot", description = "Text-based copilot queries (conditional on COPILOT_ENABLED)")
-public class CopilotController {
+@RequestMapping("/api/v1/util-agent")
+@ConditionalOnProperty(name = "UTIL_AGENT_ENABLED", havingValue = "true", matchIfMissing = true)
+@Tag(name = "Util Agent", description = "Text-based Util Agent queries (conditional on UTIL_AGENT_ENABLED)")
+public class UtilAgentController {
     
     @Autowired
-    private CopilotService copilotService;
+    private UtilAgentService utilAgentService;
     
-    @Value("${COPILOT_API_KEY:dev_key_change_me}")
+    @Value("${UTIL_AGENT_API_KEY:dev_key_change_me}")
     private String apiKey;
     
     @PostMapping("/query")
     @Operation(
-        summary = "Ask the copilot",
-        description = "Submit a text question. Requires X-API-Key header matching COPILOT_API_KEY."
+        summary = "Ask the Util Agent",
+        description = "Submit a text question. Requires X-API-Key header matching UTIL_AGENT_API_KEY."
     )
     public ResponseEntity<?> query(
             @RequestHeader(value = "X-API-Key", required = false) String providedKey,
@@ -46,7 +46,7 @@ public class CopilotController {
         }
         
         try {
-            CopilotResponse response = copilotService.processQuery(question);
+            UtilAgentResponse response = utilAgentService.processQuery(question);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(500)

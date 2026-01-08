@@ -64,7 +64,7 @@ Also required:
 - **contract-first API** (OpenAPI is authoritative)
 - **idempotent ingestion** (safe to re-run)
 - **run logs** (`source_run`) are immutable
-- minimal security baseline (CORS, optional API keys for heavy endpoints like copilot)
+- minimal security baseline (CORS, optional API keys for heavy endpoints like util-agent)
 
 ---
 
@@ -281,7 +281,7 @@ You must ask if:
 - “Should we treat city as Place or incorporate ZCTA?”
 - “Should we keep revisions as versions or overwrite?”
 - “Should map omit missing regions or return explicit null entries?”
-- “Should Copilot allow partial results by default?”
+- “Should Util Agent allow partial results by default?”
 - “What is ‘latest’ default for each metric?”
 
 ---

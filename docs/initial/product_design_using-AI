@@ -1,7 +1,7 @@
 ```markdown
 # Designing Software Projects in the Age of AI (AI-Implemented Delivery Playbook)
 
-This document is a practical framework for designing software projects where **most or all implementation is done by an AI** (e.g., Amazon Q, Copilot, Claude, ChatGPT). It focuses on **how to design, document, and sequence work** so an AI can execute safely and efficiently without hallucinating, drifting, or producing brittle systems.
+This document is a practical framework for designing software projects where **most or all implementation is done by an AI** (e.g., Amazon Q, Util Agent, Claude, ChatGPT). It focuses on **how to design, document, and sequence work** so an AI can execute safely and efficiently without hallucinating, drifting, or producing brittle systems.
 
 ---
 
@@ -138,7 +138,7 @@ AI needs decisions turned into bounded parameters.
 - Time semantics: “latest common period across metrics”
 - Missing data behavior: “show No data; never impute”
 - Performance: “cache map responses for 15 minutes”
-- Security: “API key required only for copilot endpoint”
+- Security: “API key required only for util-agent endpoint”
 - Export behavior: “include provenance columns always”
 
 ### Design technique: Decision Tables

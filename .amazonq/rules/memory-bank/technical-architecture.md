@@ -22,7 +22,7 @@
 - **Change Detection**: Compare latest period/release vs stored data
 - **Locking**: DB advisory locks per source_id to prevent overlap
 
-## Copilot Safety Model
+## Util Agent Safety Model
 - **QuerySpec JSON**: Structured queries, not LLM-generated SQL
 - **Validation**: Server validates against strict schema + allow-list
 - **Read-only**: Cannot modify database
@@ -36,7 +36,7 @@
 - **Static Boundaries**: Pre-built TopoJSON/GeoJSON assets
 
 ## Security Baseline
-- API keys for Copilot endpoints
+- API keys for Util Agent endpoints
 - Rate limiting (IP-based)
 - Strict CORS in production
 - Secrets in env vars only

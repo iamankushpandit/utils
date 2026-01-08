@@ -263,8 +263,8 @@ show_access_info() {
     echo "   Sources: curl http://localhost:${SERVER_PORT}/api/v1/sources"
     echo "   Status:  curl http://localhost:${SERVER_PORT}/api/v1/status/sources"
     echo
-    echo "🤖 Copilot API (requires API key):"
-    echo "   curl -X POST http://localhost:${SERVER_PORT}/api/v1/copilot/query \\"
+    echo "🤖 Util Agent API (requires API key):"
+    echo "   curl -X POST http://localhost:${SERVER_PORT}/api/v1/util-agent/query \\"
     echo "     -H 'Content-Type: application/json' \\"
     echo "     -H 'X-API-Key: dev_key_change_me' \\"
     echo "     -d '{\"question\": \"high electricity and low broadband\"}'"

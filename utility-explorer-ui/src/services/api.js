@@ -56,8 +56,8 @@ export const apiService = {
     return response.data
   },
   
-  async queryCopilot(question, apiKey) {
-    const response = await api.post('/copilot/query', 
+  async queryUtilAgent(question, apiKey) {
+    const response = await api.post('/util-agent/query', 
       { question },
       { headers: { 'X-API-Key': apiKey } }
     )

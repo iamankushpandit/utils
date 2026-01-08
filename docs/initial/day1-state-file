@@ -30,7 +30,7 @@ Below are **starter templates** for the 3 control docs you’ll reuse every day 
 
 ## Decisions made
 - Geo levels v1: STATE, COUNTY, PLACE (Place = “city”)
-- Copilot: read-only, must return grounded results, can answer cross-layer queries
+- Util Agent: read-only, must return grounded results, can answer cross-layer queries
 
 ## Open decisions (must ask before proceeding)
 - Repo structure: monorepo vs two repos

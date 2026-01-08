@@ -9,7 +9,7 @@
 ## Key Patterns
 - Source-driven ingestion cadence
 - Provenance tracking for all data
-- Read-only Copilot with QuerySpec validation
+- Read-only Util Agent with QuerySpec validation
 - 12-factor configuration
 - Idempotent operations
 

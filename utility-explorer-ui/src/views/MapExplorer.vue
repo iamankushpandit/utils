@@ -73,6 +73,8 @@
       @close="closeDrawer"
     />
 
+    <UtilAgentPanel @highlightRegions="handleUtilAgentHighlights" />
+
   </div>
 </template>
 
@@ -80,12 +82,14 @@
 import { apiService } from '../services/api.js'
 import MapComponent from '../components/MapComponent.vue'
 import RegionDrawer from '../components/RegionDrawer.vue'
+import UtilAgentPanel from '../components/UtilAgentPanel.vue'
 
 export default {
   name: 'MapExplorer',
   components: {
     MapComponent,
-    RegionDrawer
+    RegionDrawer,
+    UtilAgentPanel
   },
   data() {
     const mapSearchYears = Number(import.meta.env.VITE_MAP_SEARCH_YEARS || 15)
@@ -100,6 +104,7 @@ export default {
       periodByKey: {},
       drawerOpen: false,
       selectedRegion: null,
+      utilAgentHighlights: [],
       mapSearchYears
     }
   },
@@ -140,6 +145,14 @@ export default {
       await Promise.all(
         sources.map((source) => this.loadSourceMap(metricId, source.sourceId))
       )
+    },
+
+    handleUtilAgentHighlights(highlights) {
+      this.utilAgentHighlights = highlights || []
+      // In the future we could highlight regions on the map, but for now we only store them and log.
+      if (highlights && highlights.length) {
+        console.info('Util Agent highlighted regions:', highlights)
+      }
     },
 
     async loadSourceMap(metricId, sourceId) {

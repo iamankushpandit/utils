@@ -1,5 +1,5 @@
 <template>
-  <div class="copilot-panel">
+  <div class="util-agent-panel">
     <h3>Ask Questions About the Data</h3>
     
     <div class="query-section">
@@ -7,7 +7,7 @@
         <input 
           v-model="question" 
           @keyup.enter="submitQuery"
-          placeholder="Try: 'high electricity and low broadband'"
+        placeholder="Try: 'show me the latest electricity data'"
           class="query-input"
           :disabled="loading"
         />
@@ -20,8 +20,15 @@
         </button>
       </div>
       
-      <div class="examples">
-        <p><strong>Example queries:</strong></p>
+        <div class="disclaimer">
+          <p>
+            Questions are logged to help us improve the Util Agent experience.
+            If you’re uncomfortable with that, feel free not to use this feature.
+          </p>
+        </div>
+
+        <div class="examples">
+          <p><strong>Example queries:</strong></p>
         <button 
           v-for="example in examples" 
           :key="example"
@@ -92,7 +99,7 @@
 import { apiService } from '../services/api.js'
 
 export default {
-  name: 'CopilotPanel',
+  name: 'UtilAgentPanel',
   data() {
     return {
       question: '',
@@ -101,9 +108,9 @@ export default {
       error: null,
       apiKey: 'dev_key_change_me', // In real app, this would be from config/auth
       examples: [
-        'high electricity and low broadband',
-        'states with highest electricity prices',
-        'show me electricity data'
+        'show me the latest electricity data',
+        'monthly electricity cost across states',
+        'electricity retail price for each state'
       ]
     }
   },
@@ -116,7 +123,7 @@ export default {
         this.error = null
         this.response = null
         
-        this.response = await apiService.queryCopilot(this.question, this.apiKey)
+        this.response = await apiService.queryUtilAgent(this.question, this.apiKey)
         
         // Emit highlight regions if available
         if (this.response.highlightRegions) {
@@ -124,9 +131,9 @@ export default {
         }
         
       } catch (error) {
-        console.error('Copilot query failed:', error)
+        console.error('Util Agent query failed:', error)
         if (error.response?.status === 401) {
-          this.error = 'API key required for Copilot queries'
+          this.error = 'API key required for Util Agent queries'
         } else if (error.response?.status === 400) {
           this.error = 'Invalid query format'
         } else {
@@ -153,7 +160,7 @@ export default {
 </script>
 
 <style scoped>
-.copilot-panel {
+.util-agent-panel {
   background: var(--surface-2);
   border-radius: 16px;
   padding: 1.5rem;
@@ -162,7 +169,7 @@ export default {
   border: 1px solid var(--border);
 }
 
-.copilot-panel h3 {
+.util-agent-panel h3 {
   margin-bottom: 1rem;
   color: var(--ink);
 }
@@ -197,6 +204,16 @@ export default {
 
 .query-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, #1b9c8a, #147a6b);
+}
+
+.disclaimer {
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  background: var(--surface-3);
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px dashed var(--border);
 }
 
 .query-btn:disabled {

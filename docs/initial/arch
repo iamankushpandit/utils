@@ -29,7 +29,7 @@ Utility Explorer is a **map-first** dashboard that visualizes **free public data
 * **Spring Boot API (Read endpoints + ingestion orchestration + provenance)**
 * **Postgres (facts + provenance + geo metadata + runs)**
 * **Static Boundary Assets (TopoJSON/GeoJSON)**
-* **Read-only Copilot (QuerySpec → validated → SQL → results)**
+* **Read-only Util Agent (QuerySpec → validated → SQL → results)**
 
 ### High-level diagram
 
@@ -38,7 +38,7 @@ Utility Explorer is a **map-first** dashboard that visualizes **free public data
 |   Vue Frontend    | <---------------> |    Spring Boot API       |
 |  (static hosting) |                   |  - Map/Timeseries APIs   |
 |                   |                   |  - Sources metadata      |
-+---------+---------+                   |  - Copilot (read-only)   |
++---------+---------+                   |  - Util Agent (read-only)   |
           |                             |  - Ingestion dispatcher  |
           |                             +-----------+-------------+
           |                                         |
@@ -58,18 +58,18 @@ Utility Explorer is a **map-first** dashboard that visualizes **free public data
 
 ---
 
-## 3) Why Map-First + Read-only Copilot (Design Rationale)
+## 3) Why Map-First + Read-only Util Agent (Design Rationale)
 
 ### Why map-first
 
 * Decision makers need “where” instantly; maps deliver that faster than tables.
 * Drilldown + historical chart is the simplest path from “insight” → “explainable evidence”.
 
-### Why read-only Copilot (not model training)
+### Why read-only Util Agent (not model training)
 
 * Training adds cost, drift, and trust risk.
-* Read-only Copilot can be **strictly grounded** in stored facts and can enforce provenance.
-* Copilot is a UX accelerator, not a “source of truth.”
+* Read-only Util Agent can be **strictly grounded** in stored facts and can enforce provenance.
+* Util Agent is a UX accelerator, not a “source of truth.”
 
 ---
 
@@ -262,16 +262,16 @@ Every map/timeseries response includes:
 * `GET /api/v1/regions/search?q=...`
 * `GET /api/v1/regions/{geoLevel}/{geoId}`
 
-### Copilot endpoint (read-only)
+### Util Agent endpoint (read-only)
 
-* `POST /api/v1/copilot/query`
+* `POST /api/v1/util-agent/query`
 
   * Input: natural language question
   * Output: structured result + citations + `highlight_regions[]`
 
-### Copilot safety: QuerySpec pattern
+### Util Agent safety: QuerySpec pattern
 
-Copilot produces **QuerySpec JSON**, server validates and compiles into SQL.
+Util Agent produces **QuerySpec JSON**, server validates and compiles into SQL.
 
 Allowed QuerySpec shapes (v1):
 
@@ -305,7 +305,7 @@ Rationale: prevents hallucination and ensures queries remain explainable.
 * `Legend` (color scale + provenance)
 * `RegionDrawer` (details + chart + export)
 * `HistoryChart`
-* `CopilotPanel` (read-only query)
+* `UtilAgentPanel` (read-only query)
 
 ### UI rules for “no gaps”
 
@@ -351,7 +351,7 @@ Rationale: easy to diagnose issues on a single VM and scales well later.
 
 ### MVP security baseline
 
-* Copilot endpoint requires an API key (even if the UI uses it)
+* Util Agent endpoint requires an API key (even if the UI uses it)
 * rate limiting (IP-based minimal)
 * strict CORS in prod
 * dependency scanning and pinned versions
@@ -416,7 +416,7 @@ If you ever want “AWS flavor”:
 **Pros**
 
 * supports cross-layer queries
-* enables explainable Copilot
+* enables explainable Util Agent
 * makes integrity defensible
 
 **Cons**
@@ -488,7 +488,7 @@ Add these files to make the project “portfolio-grade”:
 * `docs/adr/0001-map-first.md`
 * `docs/adr/0002-no-imputation.md`
 * `docs/adr/0003-provenance-model.md`
-* `docs/adr/0004-copilot-queryspec.md`
+* `docs/adr/0004-util-agent-queryspec.md`
 * `docs/adr/0005-source-cadence-dispatcher.md`
 
 ---
@@ -499,7 +499,7 @@ Add these files to make the project “portfolio-grade”:
 2. Build baseline UI shell (map + transparency page + source list)
 3. Implement first source ingestion (electricity state-level)
 4. Implement map and timeseries endpoints with provenance
-5. Add Copilot QuerySpec + one cross-layer query type
+5. Add Util Agent QuerySpec + one cross-layer query type
 6. Add Data Status page and link it from Transparency
 
 ---
@@ -508,5 +508,5 @@ If you want, next I can produce an **LLD package** with:
 
 * exact class/interface design for the ingestion plugin system
 * the QuerySpec JSON schema and validation rules
-* example API response payloads (map + timeseries + copilot)
+* example API response payloads (map + timeseries + util-agent)
 * a minimal `docker-compose.yml` + `.env.template` aligned to this architecture

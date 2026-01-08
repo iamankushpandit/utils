@@ -41,7 +41,7 @@ OTel has 3 major parts:
 
 Capture spans for:
 
-* API requests: `/map`, `/timeseries`, `/coverage`, `/copilot/query`
+* API requests: `/map`, `/timeseries`, `/coverage`, `/util-agent/query`
 * Data ingestion runs: “Fetch source → parse → upsert facts”
 * DB calls: query latency and errors
 * External calls: HTTP status, latency, retry counts
@@ -64,7 +64,7 @@ Suggested metrics:
 
 * API: request id, route, latency, status, error type
 * Jobs: source id, run id, counts, next scheduled run, failure reason
-* Copilot: query type, datasets used, “insufficient data” reasons (no content)
+* Util Agent: query type, datasets used, “insufficient data” reasons (no content)
 
 ---
 

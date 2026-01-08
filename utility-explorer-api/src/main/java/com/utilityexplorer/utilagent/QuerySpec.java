@@ -1,4 +1,4 @@
-package com.utilityexplorer.copilot;
+package com.utilityexplorer.utilagent;
 
 import java.util.List;
 

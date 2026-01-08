@@ -15,7 +15,7 @@
 - **Map Explorer**: Primary interface with layer/source/geo/period selectors
 - **Region Details Drawer**: Current value + provenance + time series chart + CSV export
 - **Transparency Page**: Ideology + methodology + live data status + source links
-- **Copilot Panel**: Read-only query interface with examples + citations
+- **Util Agent Panel**: Read-only query interface with examples + citations
 
 ## Visual Design Rules
 - **Color scale**: Green (low) → Red (high) for choropleth
@@ -27,7 +27,7 @@
 - **Drilldown behavior**: If no data at deeper level, show boundaries but no values
 - **Source comparison**: Show multiple sources separately, never blend silently
 - **Export functionality**: CSV with full provenance fields included
-- **Copilot safety**: Show "Insufficient data" vs partial/estimated results
+- **Util Agent safety**: Show "Insufficient data" vs partial/estimated results
 
 ## Transparency Requirements
 - **Data Status Widget**: Live source status (last success, next run, errors)

@@ -13,23 +13,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@TestPropertySource(properties = "COPILOT_ENABLED=true")
-class CopilotControllerTest {
+@TestPropertySource(properties = "UTIL_AGENT_ENABLED=true")
+class UtilAgentControllerTest {
     
     @Autowired
     private MockMvc mockMvc;
     
     @Test
-    void queryCopilot_withoutApiKey_returns401() throws Exception {
-        mockMvc.perform(post("/api/v1/copilot/query")
+    void queryUtilAgent_withoutApiKey_returns401() throws Exception {
+        mockMvc.perform(post("/api/v1/util-agent/query")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"question\": \"test question\"}"))
             .andExpect(status().isUnauthorized());
     }
     
     @Test
-    void queryCopilot_withValidKey_returnsResponse() throws Exception {
-        mockMvc.perform(post("/api/v1/copilot/query")
+    void queryUtilAgent_withValidKey_returnsResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/util-agent/query")
                 .header("X-API-Key", "dev_key_change_me")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"question\": \"high electricity and low broadband\"}"))
@@ -39,12 +39,23 @@ class CopilotControllerTest {
     }
     
     @Test
-    void queryCopilot_withInvalidQuery_returnsInsufficientData() throws Exception {
-        mockMvc.perform(post("/api/v1/copilot/query")
+    void queryUtilAgent_withInvalidQuery_returnsInsufficientData() throws Exception {
+        mockMvc.perform(post("/api/v1/util-agent/query")
                 .header("X-API-Key", "dev_key_change_me")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"question\": \"unsupported query type\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("INSUFFICIENT_DATA"));
+    }
+
+    @Test
+    void queryUtilAgent_stateWithLeastCentPerKwh_returnsOk() throws Exception {
+        mockMvc.perform(post("/api/v1/util-agent/query")
+                .header("X-API-Key", "dev_key_change_me")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"question\": \"state with least cent/kWh\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("OK"))
+            .andExpect(jsonPath("$.table.rows").isNotEmpty());
     }
 }

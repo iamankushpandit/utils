@@ -16,7 +16,7 @@ The system is intentionally simple: a Vue 3/Vite frontend talks to a Spring Boot
 - **Deploy Targets:** Local dev servers; containerized for cloud (API Dockerfile provided).
 
 ### Component Inventory
-- **UI:** MapExplorer (metric tabs, source cards, drilldown map), RegionDrawer (details + CSV export), Transparency (status/schedules + run now), Copilot panel (text queries).
+- **UI:** MapExplorer (metric tabs, source cards, drilldown map), RegionDrawer (details + CSV export), Transparency (status/schedules + run now), Util Agent panel (text queries).
 - **API:** Controllers for metrics/sources/map/timeseries/status/ingestion; ingestion dispatcher + per-source jobs; DTOs for catalog and map/timeseries payloads.
 - **Data:** Relational tables for metrics, sources, map values, timeseries points, and ingestion runs.
 
@@ -30,13 +30,14 @@ The API is small and predictable: catalog, map/timeseries data, ingestion contro
 - `GET /status/sources` — status, schedule, last/next run.  
 - `POST /ingestion/run` and `/ingestion/run/{sourceId}` — trigger ingestion.  
 - `GET /export/csv` — export map/timeseries to CSV.
+- `POST /util-agent/query` — natural-language question (JSON body `{ "question": "<text>" }`) with `X-API-Key`; returns a Util Agent response with tables, highlights, and sources.
 
 ### API Docs (Swagger/OpenAPI)
-Swagger UI is available when the API runs with the SpringDoc starter: open `/swagger-ui.html` (or `/swagger-ui/index.html`) to browse and try endpoints; machine-readable JSON lives at `/v3/api-docs`. In production, restrict this to authenticated/internal users. Include examples for common flows (state map, county drilldown, timeseries export) and clarify required headers (e.g., `X-API-Key` for copilot).
+Swagger UI is available when the API runs with the SpringDoc starter: open `/swagger-ui.html` (or `/swagger-ui/index.html`) to browse and try endpoints; machine-readable JSON lives at `/v3/api-docs`. In production, restrict this to authenticated/internal users. Include examples for common flows (state map, county drilldown, timeseries export) and clarify required headers (e.g., `X-API-Key` for Util Agent).
 
 ### Environment Variables (minimum)
 - **UI:** `VITE_API_BASE_URL` (default `http://localhost:8080/api/v1`).
-- **API:** `EIA_API_KEY`, `CENSUS_API_KEY`, DB settings (`DB_URL`, `DB_USER`, `DB_PASS`), `INGESTION_DISPATCHER_ENABLED`, optional `SERVER_PORT`, CORS allowed origins, log level.
+- **API:** `EIA_API_KEY`, `CENSUS_API_KEY`, DB settings (`DB_URL`, `DB_USER`, `DB_PASS`), `INGESTION_DISPATCHER_ENABLED`, optional `SERVER_PORT`, CORS allowed origins, log level, `UTIL_AGENT_ENABLED`, `UTIL_AGENT_API_KEY`.  
 - **History windows:** `EIA_MONTHS_BACK` (default 72 months), `CENSUS_ACS_MIN_YEAR`/`CENSUS_ACS_MAX_YEAR` (defaults now-5 .. now) to pull 6 years of ACS.
 - Keep `.env` out of git; use secret managers in cloud.
 

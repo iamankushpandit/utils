@@ -505,7 +505,7 @@ public final class ApiDtos {
         public void setErrorSummary(String errorSummary) { this.errorSummary = errorSummary; }
     }
 
-    public static class CopilotResponse {
+    public static class UtilAgentResponse {
         private String status;
         private String summary;
         private PeriodInfo period;
@@ -514,7 +514,7 @@ public final class ApiDtos {
         private List<CitationInfo> citations;
         private List<String> notes;
 
-        public CopilotResponse() {}
+        public UtilAgentResponse() {}
 
         public String getStatus() { return status; }
         public void setStatus(String status) { this.status = status; }

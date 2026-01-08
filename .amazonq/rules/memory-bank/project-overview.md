@@ -19,7 +19,7 @@ Map-first, transparency-first dashboard that visualizes **free public utility-re
 ## Key Design Decisions
 - **Geography IDs**: STATE (2-digit FIPS), COUNTY (5-digit FIPS), PLACE (Census Place GEOID)
 - **Source-driven cadence**: Each data source has its own update schedule
-- **Read-only Copilot**: QuerySpec JSON → validated → SQL (no LLM-generated SQL)
+- **Read-only Util Agent**: QuerySpec JSON → validated → SQL (no LLM-generated SQL)
 - **Transparent aggregation only**: Clearly labeled, reproducible, documented
 
 ## Data Integrity Model
@@ -36,4 +36,4 @@ Every displayed value must include:
 - History chart + CSV export
 - Transparency page (static ideology + dynamic status)
 - Ingestion dispatcher with per-source cadence
-- Read-only Copilot for state-level cross-layer queries
+- Read-only Util Agent for state-level cross-layer queries

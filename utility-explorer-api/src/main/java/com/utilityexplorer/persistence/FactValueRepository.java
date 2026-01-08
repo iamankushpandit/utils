@@ -41,4 +41,15 @@ public interface FactValueRepository extends JpaRepository<FactValue, FactValueI
 
     @Query("SELECT DISTINCT f.sourceId FROM FactValue f WHERE f.metricId = :metricId")
     List<String> findDistinctSourceIdsByMetric(@Param("metricId") String metricId);
+
+    @Query("SELECT MAX(f.periodStart) FROM FactValue f WHERE f.metricId = :metricId AND f.sourceId = :sourceId")
+    LocalDate findLatestPeriodForMetricAndSource(@Param("metricId") String metricId,
+                                                 @Param("sourceId") String sourceId);
+
+    @Query("SELECT f FROM FactValue f WHERE f.metricId = :metricId AND f.sourceId = :sourceId " +
+           "AND f.geoLevel = :geoLevel AND f.periodStart = :periodStart")
+    List<FactValue> findByMetricSourceGeoLevelAndPeriod(@Param("metricId") String metricId,
+                                                        @Param("sourceId") String sourceId,
+                                                        @Param("geoLevel") String geoLevel,
+                                                        @Param("periodStart") LocalDate periodStart);
 }

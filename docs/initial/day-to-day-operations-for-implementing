@@ -353,9 +353,9 @@ Implement region click → drawer + time series chart + export CSV.
 ```
 
 ```markdown
-# Day 13 — TODAY_TASK.md (Copilot v1)
+# Day 13 — TODAY_TASK.md (Util Agent v1)
 ## Goal
-Implement read-only Copilot endpoint and UI panel (minimal).
+Implement read-only Util Agent endpoint and UI panel (minimal).
 
 ## Files allowed to change/create
 - utility-explorer-api/src/main/java/**
@@ -364,7 +364,7 @@ Implement read-only Copilot endpoint and UI panel (minimal).
 - PROJECT_STATE.md
 
 ## Requirements
-- /copilot/query requires X-API-Key.
+- /util-agent/query requires X-API-Key.
 - Implement QuerySpec internally and validate strictly.
 - Implement one query type: INTERSECTION using latest common period (only using existing data).
 - UI panel: input question, display result table + citations, “highlight on map” optional.
