@@ -15,6 +15,11 @@ The system is intentionally simple: a Vue 3/Vite frontend talks to a Spring Boot
 - **Data Flow:** Ingestion → DB → API → UI maps/time series. Legend and value ranges are supplied by API, with client fallback.  
 - **Deploy Targets:** Local dev servers; containerized for cloud (API Dockerfile provided).
 
+### Documentation
+*   [How to Add a New Source](docs/dev_rules/HOW_TO_ADD_NEW_SOURCE.md): Guide for contributors to add new data adapters.
+*   [Architecture](ARCHITECTURE.md): High-level system design.
+*   [Demo](DEMO.md): Walkthrough of features.
+
 ### Component Inventory
 - **UI:** MapExplorer (metric tabs, source cards, drilldown map), RegionDrawer (details + CSV export), Transparency (status/schedules + run now), Util Agent panel (text queries).
 - **API:** Controllers for metrics/sources/map/timeseries/status/ingestion; ingestion dispatcher + per-source jobs; DTOs for catalog and map/timeseries payloads.
@@ -25,7 +30,8 @@ The API is small and predictable: catalog, map/timeseries data, ingestion contro
 
 - `GET /metrics` — metric catalog.  
 - `GET /sources` — source catalog (mock/live flags).  
-- `GET /map` — params: `metricId`, `sourceId`, `geoLevel` (STATE|COUNTY), `parentGeoLevel`, `parentGeoId`, `period` (YYYY or YYYY-MM).  
+- `GET /map` — params: `metricId`, `sourceId`, `geoLevel` (STATE|COUNTY), `parentGeoLevel`, `parentGeoId`, `period` (YYYY or YYYY-MM).
+- `GET /map/range` — same params plus `startPeriod`/`endPeriod` (YYYY or YYYY-MM); returns multiple map snapshots for each period in the inclusive range.
 - `GET /timeseries` — params: metricId, sourceId, geoLevel, geoId, from, to.  
 - `GET /status/sources` — status, schedule, last/next run.  
 - `POST /ingestion/run` and `/ingestion/run/{sourceId}` — trigger ingestion.  

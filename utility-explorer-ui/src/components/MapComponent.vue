@@ -147,6 +147,10 @@ export default {
       }
     },
 
+    onMapDataChange() {
+      this.renderChart()
+    },
+
     renderStateMap() {
       if (!this.mapData) return
       const formatValue = (num) => this.formatNumber(num)

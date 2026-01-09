@@ -7,6 +7,7 @@
       <div class="nav-links">
         <router-link to="/">Map</router-link>
         <router-link to="/transparency">Transparency</router-link>
+        <router-link to="/agent">Util Agent</router-link>
       </div>
     </nav>
     

@@ -12,6 +12,102 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  # ==========================================
+  # Observability Stack (LGTM)
+  # ==========================================
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./config/observability/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "8888:8888" # Metrics
+    depends_on:
+      - jaeger
+      - prometheus
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686" # Web UI
+      - "14250:14250" # Model specific
+      # 4317/4318 are exposed by the collector, but Jaeger can listen too.
+      # We send from Collector -> Jaeger, so Jaeger uses internal ports.
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver # Enable pushing from OTel
+    volumes:
+      - ./config/observability/prometheus.yaml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  loki:
+    image: grafana/loki:2.9.2
+    container_name: loki
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./config/observability/loki-config.yaml:/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:2.9.2
+    container_name: promtail
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./config/observability/promtail-config.yaml:/etc/promtail/config.yml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+
   api:
     build: ./utility-explorer-api
     environment:
@@ -37,13 +133,70 @@ services:
 
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
       RAW_PAYLOAD_STORAGE_DIR: ${RAW_PAYLOAD_STORAGE_DIR}
+      
+      INTELLIGENCE_URL: http://intelligence:8000
+      
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: utility-explorer-api
+      OTEL_LOGS_EXPORTER: none
 
     ports:
-      - "${SERVER_PORT}:${SERVER_PORT}"
+      - "${SERVER_PORT:-8090}:${SERVER_PORT:-8090}"
     depends_on:
       - postgres
+      - kafka
     volumes:
-      - rawpayloads:${RAW_PAYLOAD_STORAGE_DIR}
+      - rawpayloads:${RAW_PAYLOAD_STORAGE_DIR:-/data/raw}
+
+  ingestion:
+    build: ./utility-explorer-ingestion
+    environment:
+      SERVER_PORT: ${INGESTION_PORT:-8081}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      
+      EIA_API_KEY: ${EIA_API_KEY}
+      CENSUS_API_KEY: ${CENSUS_API_KEY}
+      
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: utility-explorer-ingestion
+      OTEL_LOGS_EXPORTER: none
+
+    ports:
+      - "${INGESTION_PORT:-8081}:${INGESTION_PORT:-8081}"
+    depends_on:
+      - postgres
+      - kafka
+
+  intelligence:
+    build: ./utility-explorer-intelligence
+    ports:
+      - "8092:8000"
+    environment:
+      APP_ENV: local
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: utility-explorer-intelligence
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+
+    networks:
+      - default
+    depends_on:
+      - postgres
 
 volumes:
   pgdata:

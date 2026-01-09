@@ -349,6 +349,62 @@ paths:
                 items:
                   $ref: "#/components/schemas/SourceStatus"
 
+  /map/range:
+    get:
+      tags: [Map]
+      summary: Get map snapshots over a period range
+      description: >
+        Returns a list of map responses, one per period between `startPeriod` and `endPeriod` (inclusive). Use the same geo params as `/map`.
+      parameters:
+        - in: query
+          name: metricId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: sourceId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: geoLevel
+          required: true
+          schema:
+            $ref: "#/components/schemas/GeoLevel"
+        - in: query
+          name: parentGeoLevel
+          required: false
+          schema:
+            $ref: "#/components/schemas/GeoLevel"
+        - in: query
+          name: parentGeoId
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: startPeriod
+          required: true
+          description: Inclusive range start period (YYYY or YYYY-MM)
+          schema:
+            type: string
+        - in: query
+          name: endPeriod
+          required: true
+          description: Inclusive range end period (YYYY or YYYY-MM)
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of map snapshots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MapRangeResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /util-agent/query:
     post:
       tags: [Util Agent]
@@ -549,6 +605,14 @@ components:
         notes:
           type: array
           items: { type: string }
+
+    MapRangeResponse:
+      type: object
+      properties:
+        maps:
+          type: array
+          items:
+            $ref: "#/components/schemas/MapResponse"
 
     TimeSeriesPoint:
       type: object

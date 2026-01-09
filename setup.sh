@@ -235,6 +235,20 @@ verify_system() {
         print_error "✗ Map endpoint failed"
         exit 1
     fi
+
+    # Test Intelligence Service
+    if curl -s "http://localhost:8092/health" | grep -q "healthy"; then
+        print_success "✓ Intelligence Service is healthy"
+    else
+        print_warning "⚠ Intelligence Service check failed (is it still starting?)"
+    fi
+
+    # Test Observability Stack
+    if curl -s "http://localhost:3000/login" | grep -q "Grafana"; then
+        print_success "✓ Grafana is accessible"
+    else
+        print_warning "⚠ Grafana check failed"
+    fi
     
     # Test frontend
     if curl -s "http://localhost:${FRONTEND_PORT}" | grep -q "Utility Explorer"; then
@@ -257,6 +271,15 @@ show_access_info() {
     echo "🔧 Backend API:"
     echo "   http://localhost:${SERVER_PORT}"
     echo "   Health: http://localhost:${SERVER_PORT}/actuator/health"
+    echo
+    echo "🧠 Intelligence Service:"
+    echo "   http://localhost:8092"
+    echo "   Docs: http://localhost:8092/docs"
+    echo
+    echo "🔍 Observability Stack:"
+    echo "   Grafana:    http://localhost:3000 (admin/admin)"
+    echo "   Jaeger:     http://localhost:16686"
+    echo "   Prometheus: http://localhost:9090"
     echo
     echo "📋 Quick API Tests:"
     echo "   Metrics: curl http://localhost:${SERVER_PORT}/api/v1/metrics"

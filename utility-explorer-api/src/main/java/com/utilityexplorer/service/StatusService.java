@@ -2,6 +2,7 @@ package com.utilityexplorer.service;
 
 import com.utilityexplorer.dto.ApiDtos.*;
 import com.utilityexplorer.persistence.*;
+import com.utilityexplorer.shared.persistence.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 

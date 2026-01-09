@@ -1,0 +1,26 @@
+[
+  {
+    "id": "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH",
+    "description": "electricity retail price rate cost per kwh energy charge tariff",
+    "display_name": "Retail Price",
+    "unit": "cents/kWh"
+  },
+  {
+    "id": "ELECTRICITY_MONTHLY_COST_USD_ACS",
+    "description": "average monthly electricity bill cost amount total usd dollars payment",
+    "display_name": "Monthly Bill",
+    "unit": "USD"
+  },
+  {
+    "id": "SOLAR_GENERATION_MWH",
+    "description": "solar power generation output production capacity renewable megawatt hours",
+    "display_name": "Solar Generation",
+    "unit": "MWh"
+  },
+  {
+    "id": "WIND_GENERATION_MWH",
+    "description": "wind power generation output production capacity renewable turbines megawatt hours",
+    "display_name": "Wind Generation",
+    "unit": "MWh"
+  }
+]

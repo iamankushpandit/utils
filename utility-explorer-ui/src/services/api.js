@@ -48,6 +48,11 @@ export const apiService = {
     return response.data
   },
   
+  async getMapRange(params) {
+    const response = await api.get('/map/range', { params })
+    return response.data
+  },
+  
   async exportCsv(params) {
     const response = await api.get('/export/csv', { 
       params,
@@ -62,6 +67,13 @@ export const apiService = {
       { headers: { 'X-API-Key': apiKey } }
     )
     return response.data
+  },
+
+  async submitAgentFeedback(queryId, feedback, apiKey) {
+    await api.post('/util-agent/feedback',
+       { queryId, feedback },
+       { headers: { 'X-API-Key': apiKey } }
+    )
   }
 }
 

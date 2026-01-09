@@ -73,8 +73,6 @@
       @close="closeDrawer"
     />
 
-    <UtilAgentPanel @highlightRegions="handleUtilAgentHighlights" />
-
   </div>
 </template>
 
@@ -82,14 +80,12 @@
 import { apiService } from '../services/api.js'
 import MapComponent from '../components/MapComponent.vue'
 import RegionDrawer from '../components/RegionDrawer.vue'
-import UtilAgentPanel from '../components/UtilAgentPanel.vue'
 
 export default {
   name: 'MapExplorer',
   components: {
     MapComponent,
-    RegionDrawer,
-    UtilAgentPanel
+    RegionDrawer
   },
   data() {
     const mapSearchYears = Number(import.meta.env.VITE_MAP_SEARCH_YEARS || 15)
@@ -104,7 +100,6 @@ export default {
       periodByKey: {},
       drawerOpen: false,
       selectedRegion: null,
-      utilAgentHighlights: [],
       mapSearchYears
     }
   },
@@ -147,14 +142,6 @@ export default {
       )
     },
 
-    handleUtilAgentHighlights(highlights) {
-      this.utilAgentHighlights = highlights || []
-      // In the future we could highlight regions on the map, but for now we only store them and log.
-      if (highlights && highlights.length) {
-        console.info('Util Agent highlighted regions:', highlights)
-      }
-    },
-
     async loadSourceMap(metricId, sourceId) {
       const key = this.buildKey(metricId, sourceId)
       this.loadingByKey[key] = true
@@ -177,48 +164,48 @@ export default {
      * before falling back to monthly data. Stores a fallback map in case nothing is found.
      */
     async fetchBestMap(metricId, sourceId) {
-      const metric = this.metrics.find((m) => m.metricId === metricId)
-      const granularity = metric?.defaultGranularity || 'MONTH'
-      const now = new Date()
-      let fallback = null
-      let fallbackPeriod = null
       const yearsToSearch = this.mapSearchYears > 0 ? this.mapSearchYears : 15
+      const now = new Date()
+      const endYear = now.getFullYear()
+      const startYear = endYear - yearsToSearch + 1
+      const startPeriod = `${startYear}`
+      const endPeriod = `${endYear}`
 
-      // Helper to fetch and short-circuit on first hit
-      const tryPeriod = async (period) => {
-        const mapData = await apiService.getMap({
+      try {
+        const rangeData = await apiService.getMapRange({
           metricId,
           sourceId,
           geoLevel: 'STATE',
-          period
+          startPeriod,
+          endPeriod
         })
-        if (mapData?.values?.length) {
-          return { hit: true, mapData, periodLabel: period }
+        const maps = (rangeData?.maps || []).filter((snapshot) => snapshot?.values?.length)
+        if (maps.length) {
+          const latest = maps.reduce((best, current) => {
+            const bestDate = new Date(best.period.periodStart)
+            const currentDate = new Date(current.period.periodStart)
+            return currentDate > bestDate ? current : best
+          }, maps[0])
+          return {
+            mapData: latest,
+            periodLabel: latest.period?.periodStart || latest.period?.periodEnd || `${startPeriod}-${endPeriod}`
+          }
         }
-        if (!fallback) {
-          fallback = mapData
-          fallbackPeriod = period
-        }
-        return { hit: false }
+      } catch (error) {
+        console.warn('Range map fetch failed, falling back to single period', error)
       }
 
-      // Prefer yearly periods for map display, search a broader window to cover older latest data
-      const currentYear = now.getFullYear()
-      for (let yr = currentYear; yr >= currentYear - yearsToSearch; yr--) {
-        const attempt = await tryPeriod(String(yr))
-        if (attempt.hit) return attempt
+      const fallbackPeriod = `${endYear}`
+      const mapData = await apiService.getMap({
+        metricId,
+        sourceId,
+        geoLevel: 'STATE',
+        period: fallbackPeriod
+      })
+      return {
+        mapData,
+        periodLabel: fallbackPeriod
       }
-
-      // Fallback to monthly search (up to configured window) if no yearly data found
-      const monthsToSearch = yearsToSearch * 12
-      for (let i = 0; i <= monthsToSearch - 1; i++) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-        const attempt = await tryPeriod(period)
-        if (attempt.hit) return attempt
-      }
-
-      return { mapData: fallback, periodLabel: fallbackPeriod || 'Unknown' }
     },
 
     buildKey(metricId, sourceId) {

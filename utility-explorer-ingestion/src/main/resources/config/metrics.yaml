@@ -1,0 +1,10 @@
+version: 1.0
+categories:
+  - id: "ELECTRICITY"
+    name: "Electricity"
+    icon: "bolt"
+  - id: "BROADBAND"
+    name: "Internet Access"
+    icon: "wifi"
+
+metrics: []

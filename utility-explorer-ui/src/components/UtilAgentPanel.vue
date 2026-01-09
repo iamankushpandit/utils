@@ -13,7 +13,7 @@
         />
         <button 
           @click="submitQuery" 
-          :disabled="loading || !question.trim()"
+          :disabled="loading || !question.trim"
           class="query-btn"
         >
           {{ loading ? 'Processing...' : 'Ask' }}
@@ -43,9 +43,14 @@
     <div v-if="response" class="response-section">
       <div class="response-header">
         <h4>{{ response.summary }}</h4>
-        <span :class="['status-badge', response.status.toLowerCase()]">
-          {{ response.status }}
-        </span>
+        <div class="header-badges">
+          <span :class="['status-badge', response.status.toLowerCase()]">
+            {{ response.status }}
+          </span>
+          <span v-if="response.responseOrigin" class="origin-badge">
+            {{ response.responseOrigin }}
+          </span>
+        </div>
       </div>
       
       <div v-if="response.table" class="results-table">
@@ -87,6 +92,19 @@
           </li>
         </ul>
       </div>
+
+      <div v-if="response.disclaimer" class="response-disclaimer">
+        {{ response.disclaimer }}
+      </div>
+
+      <div class="feedback-section" v-if="response.queryId && !feedbackSent">
+        <span class="feedback-label">Was this helpful?</span>
+        <button class="feedback-btn" @click="sendFeedback('THUMBS_UP')" title="Yes">👍</button>
+        <button class="feedback-btn" @click="sendFeedback('THUMBS_DOWN')" title="No">👎</button>
+      </div>
+      <div v-if="feedbackSent" class="feedback-thankyou">
+        Thanks for your feedback!
+      </div>
     </div>
     
     <div v-if="error" class="error-section">
@@ -95,6 +113,22 @@
   </div>
 </template>
 
+<!-- 
+  API Documentation for UI Developers:
+  
+  Component: UtilAgentPanel
+  Purpose: Provides a conversational interface for the user to query utility data.
+  
+  Props: None
+  
+  State:
+  - messages: Array of { id, text, isUser, timestamp }
+  - isLoading: Boolean
+  
+  Key Methods:
+  - sendMessage(): Posts payload to /api/v1/util-agent/query
+  - handleFeedback(id, type): Posts to /api/v1/util-agent/feedback
+-->
 <script>
 import { apiService } from '../services/api.js'
 
@@ -106,6 +140,7 @@ export default {
       response: null,
       loading: false,
       error: null,
+      feedbackSent: false,
       apiKey: 'dev_key_change_me', // In real app, this would be from config/auth
       examples: [
         'show me the latest electricity data',
@@ -122,28 +157,27 @@ export default {
         this.loading = true
         this.error = null
         this.response = null
+        this.feedbackSent = false
         
         this.response = await apiService.queryUtilAgent(this.question, this.apiKey)
-        
-        // Emit highlight regions if available
-        if (this.response.highlightRegions) {
-          this.$emit('highlightRegions', this.response.highlightRegions)
-        }
-        
-      } catch (error) {
-        console.error('Util Agent query failed:', error)
-        if (error.response?.status === 401) {
-          this.error = 'API key required for Util Agent queries'
-        } else if (error.response?.status === 400) {
-          this.error = 'Invalid query format'
-        } else {
-          this.error = 'Query failed. Please try again.'
-        }
+      } catch (err) {
+        this.error = err.response?.data?.message || 'Failed to get response from Util Agent'
+        console.error(err)
       } finally {
         this.loading = false
       }
     },
-    
+
+    async sendFeedback(type) {
+        if (!this.response || !this.response.queryId) return;
+        try {
+            await apiService.submitAgentFeedback(this.response.queryId, type, this.apiKey);
+            this.feedbackSent = true;
+        } catch (e) {
+            console.error("Feedback failed", e);
+        }
+    },
+
     formatCell(cell) {
       if (typeof cell === 'number') {
         return cell.toFixed(1)
@@ -151,9 +185,9 @@ export default {
       return cell
     },
     
-    formatDate(dateString) {
-      if (!dateString) return 'Unknown'
-      return new Date(dateString).toLocaleString()
+    formatDate(dateStr) {
+      if (!dateStr) return 'Unknown'
+      return new Date(dateStr).toLocaleString()
     }
   }
 }
@@ -284,6 +318,24 @@ export default {
   color: var(--warning);
 }
 
+.header-badges {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.origin-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background-color: var(--surface-3);
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+
 .results-table {
   margin-bottom: 1rem;
   overflow-x: auto;
@@ -354,5 +406,47 @@ export default {
 .error {
   color: var(--danger);
   margin: 0;
+}
+
+.response-disclaimer {
+  font-size: 0.8rem;
+  color: var(--ink-light);
+  font-style: italic;
+  margin-top: 1rem;
+  border-top: 1px solid var(--ice);
+  padding-top: 0.5rem;
+}
+
+.feedback-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--ice);
+}
+
+.feedback-label {
+    font-size: 0.9rem;
+    color: var(--ink-muted);
+}
+
+.feedback-btn {
+    background: none;
+    border: 1px solid var(--ice);
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    font-size: 1.2rem;
+}
+.feedback-btn:hover {
+    background: var(--sky-light);
+}
+
+.feedback-thankyou {
+    margin-top: 1rem;
+    color: var(--green);
+    font-size: 0.9rem;
+    font-style: italic;
 }
 </style>

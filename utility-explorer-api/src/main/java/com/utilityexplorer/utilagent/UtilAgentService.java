@@ -3,8 +3,14 @@ package com.utilityexplorer.utilagent;
 import jakarta.annotation.PostConstruct;
 import com.utilityexplorer.dto.ApiDtos.*;
 import com.utilityexplorer.persistence.*;
+import com.utilityexplorer.shared.persistence.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
 import java.time.LocalDate;
 import java.util.*;
@@ -34,6 +40,15 @@ public class UtilAgentService {
     
     @Autowired
     private RegionRepository regionRepository;
+    
+    @Autowired
+    private UserQueryRepository userQueryRepository;
+
+    @Autowired
+    private RestTemplate restTemplate;
+
+    @Value("${intelligence.url:http://localhost:8092}")
+    private String intelligenceUrl;
 
     private final Map<String, Metric> metricCache = new LinkedHashMap<>();
     
@@ -43,11 +58,108 @@ public class UtilAgentService {
     }
     
     public UtilAgentResponse processQuery(String question) {
+        /**
+         * Hybrid Architectue Decision:
+         * 1. Primary: Logic-driven "Intelligence Service" (Python/FastAPI) which processes natural language
+         *    and returns answers using RAG or specialized models.
+         * 2. Fallback: If Python service fails or is disabled, falls back to internal 'deterministic' Java logic
+         *    (regex parsing) to ensure basic functionality (uptime reliability).
+         */
+        // Try Python Intelligence Service first
+        if (intelligenceUrl != null && !intelligenceUrl.isEmpty()) {
+            try {
+                return callIntelligenceService(question);
+            } catch (Exception e) {
+                System.err.println("Warning: Intelligence service unavailable (" + e.getMessage() + "). Falling back to deterministic logic.");
+            }
+        }
+
+        // Fallback to internal logic
+        UtilAgentResponse response;
         QuerySpec querySpec = parseQuestion(question);
         if (querySpec == null) {
-            return createInsufficientDataResponse("Unable to understand the query");
+            response = createInsufficientDataResponse("Unable to understand the query");
+        } else {
+            response = executeQuery(querySpec);
         }
-        return executeQuery(querySpec);
+        enrichAndLogResponse(response, question, querySpec);
+        return response;
+    }
+
+    private UtilAgentResponse callIntelligenceService(String question) {
+        String url = intelligenceUrl + "/query";
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        
+        Map<String, String> body = new HashMap<>();
+        body.put("question", question);
+
+        HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
+        
+        // Response format matching Python Pydantic model
+        // { "answer": "...", "sources": [], "visualization": {} }
+        Map<String, Object> pythonResponse = restTemplate.postForObject(url, request, Map.class);
+        
+        if (pythonResponse == null) {
+            throw new RuntimeException("Empty response from intelligence service");
+        }
+
+        UtilAgentResponse response = new UtilAgentResponse();
+        response.setSummary((String) pythonResponse.get("answer"));
+        response.setStatus("OK");
+        
+        // Simple mapping for Story 2 - will be enriched in future stories
+        response.setResponseOrigin("intelligence-service-v1");
+        response.setConfidence(1.0); 
+        
+        // Map sources if present
+        if (pythonResponse.get("sources") instanceof List) {
+           // Basic string list mapping for now, can be expanded
+        }
+        
+        // Capture query for history
+        enrichAndLogResponse(response, question, null);
+        
+        return response;
+    }
+
+    public void submitFeedback(Long queryId, String feedback) {
+        userQueryRepository.findById(queryId).ifPresent(userQuery -> {
+            userQuery.setFeedback(feedback);
+            userQueryRepository.save(userQuery);
+        });
+    }
+
+    private void enrichAndLogResponse(UtilAgentResponse response, String question, QuerySpec querySpec) {
+        response.setResponseTimestamp(java.time.Instant.now().toString());
+        if (response.getResponseOrigin() == null) {
+            response.setResponseOrigin("deterministic");
+        }
+        if (response.getConfidence() == null) {
+            response.setConfidence(1.0);
+        }
+        if (response.getDisclaimer() == null) {
+            response.setDisclaimer("Generated from structured database facts.");
+        }
+
+        try {
+            UserQuery userQuery = new UserQuery(question, false);
+            if (querySpec != null && querySpec.getMetrics() != null && !querySpec.getMetrics().isEmpty()) {
+                MetricSpec first = querySpec.getMetrics().get(0);
+                if (first != null) {
+                    userQuery.setMetricId(first.getMetricId());
+                    userQuery.setSourceId(first.getSourceId());
+                }
+            }
+            userQueryRepository.save(userQuery);
+            if (userQuery.getId() != null) {
+                response.setQueryId(userQuery.getId());
+            }
+        } catch (Exception e) {
+            // Non-blocking logging failure
+            System.err.println("Failed to log user query: " + e.getMessage());
+        }
     }
     
     private QuerySpec parseQuestion(String question) {
@@ -275,5 +387,12 @@ public class UtilAgentService {
         response.setSummary(message);
         response.setNotes(Arrays.asList("Unable to process query with available data"));
         return response;
+    }
+
+    public void captureFeedback(Long queryId, String feedback) {
+        userQueryRepository.findById(queryId).ifPresent(userQuery -> {
+            userQuery.setFeedback(feedback);
+            userQueryRepository.save(userQuery);
+        });
     }
 }

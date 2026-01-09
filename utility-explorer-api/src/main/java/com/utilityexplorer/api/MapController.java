@@ -33,4 +33,22 @@ public class MapController {
             .map(mapData -> ResponseEntity.ok(mapData))
             .orElse(ResponseEntity.badRequest().build());
     }
+
+    @GetMapping("/map/range")
+    @Operation(
+        summary = "Get map values over a period range",
+        description = "Returns a list of map snapshots for each period between startPeriod and endPeriod (inclusive). Pass geoLevel=STATE for national view or geoLevel=COUNTY with parentGeoLevel=STATE + parentGeoId for drilldowns."
+    )
+    public ResponseEntity<MapRangeResponse> getMapRange(
+            @RequestParam String metricId,
+            @RequestParam String sourceId,
+            @RequestParam String geoLevel,
+            @RequestParam(required = false) String parentGeoLevel,
+            @RequestParam(required = false) String parentGeoId,
+            @RequestParam String startPeriod,
+            @RequestParam String endPeriod) {
+        return mapService.getMapDataRange(metricId, sourceId, geoLevel, parentGeoLevel, parentGeoId, startPeriod, endPeriod)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.badRequest().build());
+    }
 }

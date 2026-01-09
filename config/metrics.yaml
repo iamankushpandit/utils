@@ -1,0 +1,39 @@
+version: 1.0
+categories:
+  - id: "ELECTRICITY"
+    name: "Electricity"
+    icon: "bolt"
+    description: "Retail prices, monthly bills, and consumption data."
+
+metrics:
+  - id: "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH"
+    category: "ELECTRICITY"
+    name: "Retail Price"
+    unit: "cents/kWh"
+    description: "Average retail price of electricity for residential sector."
+    defaultGranularity: "MONTHLY"
+    supportedGeoLevels: "STATE,COUNTY"
+    visualization:
+      type: "CHOROPLETH"
+      colorScale: "GREEN_TO_RED" # High prices are bad
+      valueFormat: "CURRENCY_CENTS"
+    ingestion:
+      adapter: "EIA_API"
+      parameters:
+        seriesId: "ELEC.PRICE.US-RES.M"
+        
+  - id: "ELECTRICITY_MONTHLY_COST_USD_ACS"
+    category: "ELECTRICITY"
+    name: "Monthly Cost (ACS)"
+    unit: "USD"
+    description: "Median monthly electricity cost from Census American Community Survey."
+    defaultGranularity: "YEARLY"
+    supportedGeoLevels: "STATE,COUNTY"
+    visualization:
+      type: "CHOROPLETH"
+      colorScale: "GREEN_TO_RED"
+      valueFormat: "CURRENCY_USD"
+    ingestion:
+      adapter: "CENSUS_ACS"
+      parameters:
+        variable: "B25024_001E" # Example variable code

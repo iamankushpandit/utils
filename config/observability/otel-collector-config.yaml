@@ -1,0 +1,34 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins: ["http://localhost:5173", "http://localhost:8080", "http://localhost:8090"]
+          allowed_headers: ["*"]
+
+processors:
+  batch:
+
+exporters:
+  otlp: # Sending to Jaeger
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  prometheusremotewrite: # Sending to Prometheus
+    endpoint: "http://prometheus:9090/api/v1/write"
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheusremotewrite, debug]

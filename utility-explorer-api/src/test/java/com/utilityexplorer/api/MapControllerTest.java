@@ -50,4 +50,16 @@ class MapControllerTest {
                 .param("period", "2025-12"))
             .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void getMapRange_withValidRange_returnsSnapshots() throws Exception {
+        mockMvc.perform(get("/api/v1/map/range")
+                .param("metricId", "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH")
+                .param("sourceId", "EIA")
+                .param("geoLevel", "STATE")
+                .param("startPeriod", "2025-01")
+                .param("endPeriod", "2025-03"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.maps").isArray());
+    }
 }

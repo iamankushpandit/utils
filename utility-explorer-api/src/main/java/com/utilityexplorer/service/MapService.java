@@ -2,102 +2,129 @@ package com.utilityexplorer.service;
 
 import com.utilityexplorer.dto.ApiDtos.*;
 import com.utilityexplorer.persistence.*;
+import com.utilityexplorer.shared.persistence.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.util.DoubleSummaryStatistics;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class MapService {
-    
+
     @Autowired
     private FactValueRepository factValueRepository;
-    
+
     @Autowired
     private MetricRepository metricRepository;
-    
+
     @Autowired
     private SourceRepository sourceRepository;
-    
+
     @Autowired
     private RegionRepository regionRepository;
-    
+
     public Optional<MapResponse> getMapData(String metricId, String sourceId, String geoLevel,
-                                           String parentGeoLevel, String parentGeoId, String period) {
-        
-        // Validate metric and source exist
+                                            String parentGeoLevel, String parentGeoId, String period) {
         Optional<Metric> metric = metricRepository.findById(metricId);
         Optional<Source> source = sourceRepository.findById(sourceId);
-        
+        if (metric.isEmpty() || source.isEmpty() || period == null) {
+            return Optional.empty();
+        }
+        LocalDate periodStart = parsePeriodStart(period);
+        LocalDate periodEnd = parsePeriodEnd(period);
+        if (periodStart == null || periodEnd == null) {
+            return Optional.empty();
+        }
+
+        List<FactValue> facts = fetchFacts(metricId, sourceId, geoLevel, parentGeoLevel, parentGeoId, periodStart, periodEnd);
+        return Optional.of(buildMapResponse(metric.get(), source.get(), geoLevel, parentGeoId, periodStart, periodEnd, facts));
+    }
+
+    public Optional<MapRangeResponse> getMapDataRange(String metricId, String sourceId, String geoLevel,
+                                                      String parentGeoLevel, String parentGeoId,
+                                                      String startPeriod, String endPeriod) {
+        Optional<Metric> metric = metricRepository.findById(metricId);
+        Optional<Source> source = sourceRepository.findById(sourceId);
         if (metric.isEmpty() || source.isEmpty()) {
             return Optional.empty();
         }
-        
-        // Parse period (supports YYYY or YYYY-MM)
-        LocalDate periodStart, periodEnd;
-        try {
-            String[] parts = period.split("-");
-            int year = Integer.parseInt(parts[0]);
-            if (parts.length == 1) {
-                periodStart = LocalDate.of(year, 1, 1);
-                periodEnd = LocalDate.of(year, 12, 31);
-            } else {
-                int month = Integer.parseInt(parts[1]);
-                periodStart = LocalDate.of(year, month, 1);
-                periodEnd = periodStart.withDayOfMonth(periodStart.lengthOfMonth());
-            }
-        } catch (Exception e) {
+        LocalDate rangeStart = parsePeriodStart(startPeriod);
+        LocalDate rangeEnd = parsePeriodEnd(endPeriod);
+        if (rangeStart == null || rangeEnd == null || rangeStart.isAfter(rangeEnd)) {
             return Optional.empty();
         }
-        
-        // Get fact values
-        List<FactValue> facts;
-        if (parentGeoLevel != null && parentGeoId != null && !parentGeoId.isBlank()
-            && ("COUNTY".equalsIgnoreCase(geoLevel) || "PLACE".equalsIgnoreCase(geoLevel))
-            && "STATE".equalsIgnoreCase(parentGeoLevel)) {
-            facts = factValueRepository.findMapDataByPrefix(
-                metricId,
-                sourceId,
-                geoLevel,
-                parentGeoId,
-                periodStart,
-                periodEnd
-            );
-        } else {
-            facts = factValueRepository.findMapData(metricId, sourceId, geoLevel, periodStart, periodEnd);
+
+        List<FactValue> facts = fetchFacts(metricId, sourceId, geoLevel, parentGeoLevel, parentGeoId, rangeStart, rangeEnd);
+        if (facts.isEmpty()) {
+            return Optional.empty();
         }
-        
-        // Build response
+
+        Map<String, List<FactValue>> grouped = facts.stream()
+            .collect(Collectors.groupingBy(
+                fact -> fact.getPeriodStart().toString() + "|" + fact.getPeriodEnd().toString(),
+                LinkedHashMap::new,
+                Collectors.toList()
+            ));
+
+        List<MapResponse> maps = new ArrayList<>();
+        for (Map.Entry<String, List<FactValue>> entry : grouped.entrySet()) {
+            String[] keyParts = entry.getKey().split("\\|");
+            LocalDate periodStart = LocalDate.parse(keyParts[0]);
+            LocalDate periodEnd = LocalDate.parse(keyParts[1]);
+            maps.add(buildMapResponse(metric.get(), source.get(), geoLevel, parentGeoId, periodStart, periodEnd, entry.getValue()));
+        }
+
+        MapRangeResponse rangeResponse = new MapRangeResponse();
+        rangeResponse.setMaps(maps);
+        return Optional.of(rangeResponse);
+    }
+
+    private List<FactValue> fetchFacts(String metricId, String sourceId, String geoLevel,
+                                       String parentGeoLevel, String parentGeoId,
+                                       LocalDate periodStart, LocalDate periodEnd) {
+        boolean hasParent = parentGeoLevel != null && parentGeoId != null && !parentGeoId.isBlank()
+            && ("COUNTY".equalsIgnoreCase(geoLevel) || "PLACE".equalsIgnoreCase(geoLevel))
+            && "STATE".equalsIgnoreCase(parentGeoLevel);
+
+        if (hasParent) {
+            if (periodStart.equals(periodEnd)) {
+                return factValueRepository.findMapDataByPrefix(metricId, sourceId, geoLevel, parentGeoId, periodStart, periodEnd);
+            } else {
+                return factValueRepository.findMapDataByPrefixInRange(metricId, sourceId, geoLevel, parentGeoId, periodStart, periodEnd);
+            }
+        }
+        if (periodStart.equals(periodEnd)) {
+            return factValueRepository.findMapData(metricId, sourceId, geoLevel, periodStart, periodEnd);
+        }
+        return factValueRepository.findMapDataInRange(metricId, sourceId, geoLevel, periodStart, periodEnd);
+    }
+
+    private MapResponse buildMapResponse(Metric metric, Source source, String geoLevel, String parentGeoId,
+                                         LocalDate periodStart, LocalDate periodEnd, List<FactValue> facts) {
         MapResponse response = new MapResponse();
-        response.setMetric(new MetricInfo(metricId, metric.get().getName(), metric.get().getUnit()));
+        response.setMetric(new MetricInfo(metric.getMetricId(), metric.getName(), metric.getUnit()));
         response.setSource(new SourceInfo(
-            sourceId,
-            source.get().getName(),
-            source.get().getTermsUrl(),
-            source.get().isMock()
+            source.getSourceId(),
+            source.getName(),
+            source.getTermsUrl(),
+            source.isMock()
         ));
         response.setGeoLevel(geoLevel);
         response.setParent(parentGeoId);
         response.setPeriod(new PeriodInfo(periodStart.toString(), periodEnd.toString()));
-        
+
         if (!facts.isEmpty()) {
-            // Set provenance from first fact (all should have same retrieved_at for same period)
             FactValue firstFact = facts.get(0);
             response.setRetrievedAt(firstFact.getRetrievedAt().toString());
             if (firstFact.getSourcePublishedAt() != null) {
                 response.setSourcePublishedAt(firstFact.getSourcePublishedAt().toString());
             }
-            
-            // Calculate legend stats
             DoubleSummaryStatistics stats = facts.stream()
                 .mapToDouble(f -> f.getValueNumeric().doubleValue())
                 .summaryStatistics();
             response.setLegend(new LegendStats(stats.getMin(), stats.getMax()));
-            
-            // Build values with region names
             List<MapValue> values = facts.stream()
                 .map(fact -> {
                     Optional<Region> region = regionRepository.findByGeoLevelAndGeoId(fact.getGeoLevel(), fact.getGeoId());
@@ -115,9 +142,32 @@ public class MapService {
             response.setValues(List.of());
             response.setLegend(new LegendStats(null, null));
         }
-        
-        response.setNotes(List.of("If a region has no value for this period, it will be omitted from values and displayed as 'No data' in the UI."));
-        
-        return Optional.of(response);
+        response.setNotes(List.of("If a region lacks a value for this period, it will appear as 'No data'."));
+        return response;
+    }
+
+    private LocalDate parsePeriodStart(String period) {
+        if (period == null) return null;
+        return parsePeriod(period, true);
+    }
+
+    private LocalDate parsePeriodEnd(String period) {
+        if (period == null) return null;
+        return parsePeriod(period, false);
+    }
+
+    private LocalDate parsePeriod(String period, boolean start) {
+        try {
+            String[] parts = period.split("-");
+            int year = Integer.parseInt(parts[0]);
+            if (parts.length == 1) {
+                return start ? LocalDate.of(year, 1, 1) : LocalDate.of(year, 12, 31);
+            }
+            int month = Integer.parseInt(parts[1]);
+            LocalDate date = LocalDate.of(year, month, 1);
+            return start ? date : date.withDayOfMonth(date.lengthOfMonth());
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

@@ -1,9 +1,27 @@
 # PROJECT_STATE.md — Utility Explorer
 
-## Current status (as of 2026-01-06)
-- Phase/Day: Day 14 (COMPLETED - MVP READY)
-- Repo layout: Monorepo structure
+## Current status (as of 2026-01-08)
+- Phase: Phase 1 Refactor (COMPLETED) - Multi-Module Architecture & Extensibility
+- Repo layout: Maven Multi-Module (`parent`, `api`, `shared`)
 - Local run: Docker Compose + Spring Boot + Vue UI fully functional
+
+## Change Log (Recent)
+### Phase 3: Intelligence Service (Started Jan 2026)
+- **Story 1 (Infrastructure)**: Scaffolded `utility-explorer-intelligence` (Python/FastAPI) and added to Docker mesh (Port 8092).
+- **Story 2 (Gateway)**: COMPLETED. Java API proxies requests to Python Service. Fallback logic confirmed. Integration Tests updated.
+- **Story 3 (Shared Data Access)**: COMPLETED. Dependencies (`SQLAlchemy`, `psycopg2`) installed. Database connection verified via `/health` endpoint. Renamed service to "Utility Intelligence Service".
+- **Story 4 (Structured Intent)**: *Next*. Define Pydantic models for identifying intent (e.g., `GetFacts`, `Compare`, `Explain`).
+
+### Phase 2: Ingestion Logic Split (Jan 2026)
+- **Ingestion Service**: Decoupled ingestion into `utility-explorer-ingestion` service.
+- **Event Driven**: Implemented Kafka for async event processing between Adapters and Persistence.
+- **Adapters**: Split EIA and ACS logic into dedicated modules (`utility-explorer-adapter-eia`, `utility-explorer-adapter-acs`).
+- **Documentation**: Created Developer Guide for adding new sources (`docs/dev_rules/HOW_TO_ADD_NEW_SOURCE.md`).
+
+### Phase 1: Flexibility Refactor (Jan 2026)
+- **Architecture Split**: Separated code into `utility-explorer-api` and `utility-explorer-shared`.
+- **Database Enhancements**: Added `category` and `visualization_json` to `metric` table (Migration V17).
+- **Agent Persistence**: Created `user_query` table (Migration V18).
 
 ## What is built
 - Memory Bank documentation structure
@@ -37,9 +55,10 @@
 1) Memory Bank files in .amazonq/rules/memory-bank/
 2) DB migrations in utility-explorer-api/src/main/resources/db/migration/
 3) Docker Compose setup
-4) Spring Boot API with health endpoint
+4) Maven Multi-Module POMs (Root, Shared, API)
 
 ## Decisions made
+- **Extensibility**: Metadata-Driven Metric model (DB drives UI/Ingestion).
 - Geo levels v1: STATE, COUNTY, PLACE (Place = "city")
 - Util Agent: read-only, must return grounded results, can answer cross-layer queries
 - Repo structure: Monorepo with utility-explorer-api and utility-explorer-ui
@@ -50,10 +69,15 @@
 - Cron parsing dependency for nextRunAt (return null initially)
 
 ## Next planned step
-- MVP COMPLETE: Ready for deployment and real data source integration
+- Scaffold `utility-explorer-intelligence` (Python) service.
+- Define the API contract between Java API and Python Intelligence service.
 
-## Validation commands (MVP COMPLETE)
-- docker compose up -d --build
-- curl http://localhost:8080/actuator/health
-- cd utility-explorer-ui && npm install && npm run dev
-- Open http://localhost:5173 and follow DEMO.md walkthrough
+## Backlog / Future POCs
+- Implement Authentication & Authorization (explore local IDP like Keycloak or lightweight JWT/OAuth2 mesh).
+- Implement "Broadband" example using the new Metadata-driven approach (Verify system extensibility).
+
+## Validation commands (Phase 1 COMPLETE)
+- `mvn clean install`
+- `mvn spring-boot:run -f utility-explorer-api/pom.xml`
+- `docker compose up -d`
+- `curl http://localhost:8099/actuator/health` (Port 8099 or 8080)

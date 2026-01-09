@@ -8,6 +8,22 @@ build/
 *.log
 .springBeans
 
+# Python / FastAPI
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+instance/
+.mypy_cache/
+*.pkl
+*.joblib
+
 # IDEs
 .idea/
 *.iml
@@ -30,15 +46,14 @@ coverage/
 .nyc_output/
 
 # Env files
-.env
-.env.local
-.env.*.local
+.env*
 
 # OS
 .DS_Store
 Thumbs.db
-.env
-.env.local
-.env.*.local
-.env
-.env
+
+# Misc
+*.pid
+frontend.log
+frontend.pid
+.amazonq/

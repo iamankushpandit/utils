@@ -11,6 +11,10 @@ export default defineConfig(({ mode }) => {
       port,
       strictPort: true
     },
+    test: {
+      environment: 'jsdom',
+      globals: true
+    },
     define: {
       'process.env': process.env
     }

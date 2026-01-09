@@ -49,8 +49,27 @@ public class UtilAgentController {
             UtilAgentResponse response = utilAgentService.processQuery(question);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.status(500)
-                .body(new ErrorResponse("INTERNAL_ERROR", "Query processing failed"));
+            e.printStackTrace();
+            return ResponseEntity.internalServerError()
+                .body(new ErrorResponse("INTERNAL_ERROR", e.getMessage()));
         }
+    }
+
+    @PostMapping("/feedback")
+    @Operation(summary = "Submit feedback for a query")
+    public ResponseEntity<?> feedback(
+            @RequestHeader(value = "X-API-Key", required = false) String providedKey,
+            @RequestBody FeedbackRequest request) {
+        
+        if (providedKey == null || !apiKey.equals(providedKey)) {
+            return ResponseEntity.status(401).build();
+        }
+
+        if (request.getQueryId() == null) {
+            return ResponseEntity.badRequest().body("queryId is required");
+        }
+        
+        utilAgentService.submitFeedback(request.getQueryId(), request.getFeedback());
+        return ResponseEntity.ok().build();
     }
 }

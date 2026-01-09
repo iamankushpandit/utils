@@ -233,6 +233,18 @@ public final class ApiDtos {
         public void setNotes(List<String> notes) { this.notes = notes; }
     }
 
+    public static class MapRangeResponse {
+        private List<MapResponse> maps;
+
+        public List<MapResponse> getMaps() {
+            return maps;
+        }
+
+        public void setMaps(List<MapResponse> maps) {
+            this.maps = maps;
+        }
+    }
+
     public static class MetricInfo {
         private String metricId;
         private String name;
@@ -507,17 +519,25 @@ public final class ApiDtos {
 
     public static class UtilAgentResponse {
         private String status;
+        private Long queryId;
         private String summary;
         private PeriodInfo period;
         private TableResult table;
         private List<HighlightRegion> highlightRegions;
         private List<CitationInfo> citations;
         private List<String> notes;
+        private String responseTimestamp;
+        private String responseOrigin;
+        private Double confidence;
+        private String disclaimer;
 
         public UtilAgentResponse() {}
 
         public String getStatus() { return status; }
         public void setStatus(String status) { this.status = status; }
+
+        public Long getQueryId() { return queryId; }
+        public void setQueryId(Long queryId) { this.queryId = queryId; }
 
         public String getSummary() { return summary; }
         public void setSummary(String summary) { this.summary = summary; }
@@ -536,6 +556,18 @@ public final class ApiDtos {
 
         public List<String> getNotes() { return notes; }
         public void setNotes(List<String> notes) { this.notes = notes; }
+
+        public String getResponseTimestamp() { return responseTimestamp; }
+        public void setResponseTimestamp(String responseTimestamp) { this.responseTimestamp = responseTimestamp; }
+
+        public String getResponseOrigin() { return responseOrigin; }
+        public void setResponseOrigin(String responseOrigin) { this.responseOrigin = responseOrigin; }
+
+        public Double getConfidence() { return confidence; }
+        public void setConfidence(Double confidence) { this.confidence = confidence; }
+
+        public String getDisclaimer() { return disclaimer; }
+        public void setDisclaimer(String disclaimer) { this.disclaimer = disclaimer; }
     }
 
     public static class TableResult {
@@ -589,5 +621,23 @@ public final class ApiDtos {
 
         public String getTermsUrl() { return termsUrl; }
         public void setTermsUrl(String termsUrl) { this.termsUrl = termsUrl; }
+    }
+
+    public static class FeedbackRequest {
+        private Long queryId;
+        private String feedback; // e.g. "THUMBS_UP", "THUMBS_DOWN"
+
+        public FeedbackRequest() {}
+
+        public FeedbackRequest(Long queryId, String feedback) {
+            this.queryId = queryId;
+            this.feedback = feedback;
+        }
+
+        public Long getQueryId() { return queryId; }
+        public void setQueryId(Long queryId) { this.queryId = queryId; }
+
+        public String getFeedback() { return feedback; }
+        public void setFeedback(String feedback) { this.feedback = feedback; }
     }
 }

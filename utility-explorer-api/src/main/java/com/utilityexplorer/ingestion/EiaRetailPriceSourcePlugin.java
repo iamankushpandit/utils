@@ -2,8 +2,8 @@ package com.utilityexplorer.ingestion;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.utilityexplorer.persistence.FactValue;
-import com.utilityexplorer.persistence.FactValueRepository;
+import com.utilityexplorer.shared.persistence.FactValue;
+import com.utilityexplorer.shared.persistence.FactValueRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;

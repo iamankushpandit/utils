@@ -50,6 +50,12 @@
             <artifactId>flyway-core</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.utilityexplorer</groupId>
+            <artifactId>utility-explorer-shared</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- OpenAPI/Swagger UI -->
         <dependency>
             <groupId>org.springdoc</groupId>

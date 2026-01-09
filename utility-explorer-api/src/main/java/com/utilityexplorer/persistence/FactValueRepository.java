@@ -1,5 +1,7 @@
 package com.utilityexplorer.persistence;
 
+import com.utilityexplorer.shared.persistence.FactValue;
+import com.utilityexplorer.shared.persistence.FactValueId;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,7 +30,25 @@ public interface FactValueRepository extends JpaRepository<FactValue, FactValueI
                                        @Param("geoIdPrefix") String geoIdPrefix,
                                        @Param("periodStart") LocalDate periodStart,
                                        @Param("periodEnd") LocalDate periodEnd);
-    
+
+    @Query("SELECT f FROM FactValue f WHERE f.metricId = :metricId AND f.sourceId = :sourceId " +
+           "AND f.geoLevel = :geoLevel AND f.periodStart >= :from AND f.periodEnd <= :to ORDER BY f.periodStart")
+    List<FactValue> findMapDataInRange(@Param("metricId") String metricId,
+                                       @Param("sourceId") String sourceId,
+                                       @Param("geoLevel") String geoLevel,
+                                       @Param("from") LocalDate from,
+                                       @Param("to") LocalDate to);
+
+    @Query("SELECT f FROM FactValue f WHERE f.metricId = :metricId AND f.sourceId = :sourceId " +
+           "AND f.geoLevel = :geoLevel AND f.geoId LIKE CONCAT(:geoIdPrefix, '%') " +
+           "AND f.periodStart >= :from AND f.periodEnd <= :to ORDER BY f.periodStart")
+    List<FactValue> findMapDataByPrefixInRange(@Param("metricId") String metricId,
+                                               @Param("sourceId") String sourceId,
+                                               @Param("geoLevel") String geoLevel,
+                                               @Param("geoIdPrefix") String geoIdPrefix,
+                                               @Param("from") LocalDate from,
+                                               @Param("to") LocalDate to);
+
     @Query("SELECT f FROM FactValue f WHERE f.metricId = :metricId AND f.sourceId = :sourceId " +
            "AND f.geoLevel = :geoLevel AND f.geoId = :geoId " +
            "AND f.periodStart >= :from AND f.periodEnd <= :to ORDER BY f.periodStart")
