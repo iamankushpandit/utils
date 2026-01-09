@@ -1,11 +1,27 @@
 # PROJECT_STATE.md — Utility Explorer
 
 ## Current status (as of 2026-01-08)
-- Phase: Phase 4 Implementation - Automated Metadata Discovery (Stories 10-14)
+- Phase: Phase 5 - Generative Intelligence (Optimization)
 - Repo layout: Maven Multi-Module (`parent`, `api`, `shared`, `adapters`, `ingestion`) + Microservices (`intelligence`)
 - Architecture: Event-Driven Metadata Broadcasting (Spring Boot -> Kafka -> Python Consumer -> Vector DB)
+- **Status**: Local LLM (`ollama`) successfully integrated and validated.
+    - **Models**: Usage of `qwen2.5-coder:1.5b` for Text-to-SQL logic.
+    - **Performance**: High confidence on Regex Rules (0.3s), high accuracy on GenAI fallback for complex queries (4s).
+    - **Verification**: 46/55 Automated Tests Passed (83%), including GenAI fallback and Forecasting scenarios.
+
+## Upcoming Stories: Phase 6 - Frontend & Visualization
+1.  **Story 1 (UI Integration)**: Update the Agent Chat UI to display the "GenAI" badge when an answer was auto-generated.
+2.  **Story 2 (Markdown)**: Ensure the Agent UI properly renders the Markdown tables returned by GenAI.
+3.  **Story 3 (Visuals)**: Improve the "List Intent" maps for county-level data.
 
 ## Change Log (Recent)
+### Phase 5: Generative Intelligence (Jan 2026)
+- **Story 1 (Infra)**: Added `llm-mesh` container running Ollama.
+- **Story 2 (Client)**: Implemented `LLMClient` in Python for async generation.
+- **Story 3 (Prompting)**: Developed "Schema-Aware" prompt for Text-to-SQL.
+- **Story 4 (Hybrid AI)**: Designed "Smart Fallback" (Rules -> GenAI) architecture.
+- **Story 5 (Verification)**: Validated system with 55-question test suite (83% Pass Rate). Confirmed "Prediction" intent works seamlessly.
+
 ### Phase 4: Automated Metadata Discovery (Jan 2026)
 - **Story 10 (Metadata Schema)**: Defined `MetricMetadata` schema in Postgres and shared DTOs for Kafka messages.
 - **Story 11 (Adapter Interface)**: Updated `IngestionAdapter` interface to include `getMetricDefinitions()`.

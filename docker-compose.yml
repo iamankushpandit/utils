@@ -185,18 +185,46 @@ services:
       - postgres
       - kafka
 
+  # ==========================================
+  # Intelligence Services
+  # ==========================================
+  
+  # Local LLM Engine (Story 1 - GenAI Infra)
+  llm-mesh:
+    image: ollama/ollama:latest
+    container_name: llm-mesh
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    # Serve API and keep container alive
+    entrypoint: ["/bin/sh", "-c", "/usr/bin/ollama serve"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+
   intelligence:
     build: ./utility-explorer-intelligence
     ports:
       - "8092:8000"
     environment:
       APP_ENV: local
+      # Database
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       
+      # Generative AI Config
+      LLM_HOST: http://llm-mesh:11434
+      LLM_MODEL: qwen2.5-coder:1.5b
+
+      # Observability
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OTEL_SERVICE_NAME: utility-explorer-intelligence
       OTEL_TRACES_EXPORTER: otlp
@@ -207,7 +235,9 @@ services:
       - default
     depends_on:
       - postgres
+      - llm-mesh
 
 volumes:
   pgdata:
   rawpayloads:
+  ollama_data:

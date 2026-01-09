@@ -16,6 +16,7 @@ import datetime
 import spacy
 import asyncio
 from metadata_consumer import consume_metadata
+from llm_client import LLMClient
 
 # Helper: US State Name to Code Mapping (FIPS Codes as stored in DB)
 US_STATES = {
@@ -45,6 +46,7 @@ FIPS_TO_NAME = {v: k.title() for k, v in US_STATES.items() if len(k) > 2}
 # Global ML Model
 intent_model = None
 nlp = None
+llm_client = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -57,6 +59,15 @@ async def lifespan(app: FastAPI):
     # Load ML Model
     global intent_model
     global nlp
+    global llm_client
+    
+    # Initialize Local LLM Client (Story 2 - GenAI Client)
+    llm_client = LLMClient()
+    is_llm_up = await llm_client.check_health()
+    if is_llm_up:
+        print("INFO: Connected to Local LLM Mesh (Ollama).")
+    else:
+        print("WARN: Could not connect to Local LLM Mesh. Check llm-mesh container.")
 
     # Load SPACY Model (For Entity Extraction)
     # This allows generic entity recognition (Locations, etc.) without manual rules
@@ -97,6 +108,7 @@ class AgentResponse(BaseModel):
     answer: str
     sources: Optional[List] = None
     visualization: Optional[Dict] = None
+    debug_meta: Optional[Dict] = None
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
@@ -115,86 +127,121 @@ def health_check(db: Session = Depends(get_db)):
         "database": db_status
     }
 
+@app.get("/llm/test")
+async def test_llm_connection():
+    """
+    Validation endpoint for Story 2 (Client Integration).
+    """
+    if not llm_client:
+        raise HTTPException(status_code=503, detail="LLM Client not initialized")
+    
+    response = await llm_client.generate_response("Say 'Systems Online'")
+    return {"status": "success", "response": response}
+
 @app.post("/query", response_model=AgentResponse)
-def query_agent(request: QueryRequest, db: Session = Depends(get_db)):
+async def query_agent(request: QueryRequest, db: Session = Depends(get_db)):
     """
-    Handles the user query by identifying intent, performing RAG, and generating a response.
-    
-    Flow:
-    1. Identify Intent (Semantic Guardrails + Rules)
-    2. If valid, perform RAG (Retrieval Augmented Generation) by searching KnowledgeChunks.
-    3. Log the query and result to IntelligenceQueryLog for analytics.
-    
-    Returns:
-        AgentResponse: The answer and any optional visualization data.
+    Handles the user query.
+    [DEPRECATION NOTICE]: Rule-based logic matches first; if low confidence, 
+    falls back to Generative AI (LLM) Text-to-SQL.
     """
-    # 1. Identify Intent (Mock Implementation using Regex/Keywords)
+    # 1. Identify Intent (Rule Based)
     intent = identify_intent(request.question)
     
-    # 2. Logic based on intent (Story 4 Placeholder)
-    answer_text = intent.response_text
-    
-    # RAG Retrieval Logic (Story 5)
-    retrieved_chunks = []
-    if intent.intent_type != "out_of_scope":
-        try:
-            # 1. Embed query
-            # Note: In production this would utilize a Vector DB. 
-            # Here we do a linear scan in Python for demonstration/MVP.
-            query_embedding = generate_embedding(request.question)
-            
-            # 2. Retrieve chunks from DB
-            chunks = db.query(KnowledgeChunk).all()
-            
-            scored_chunks = []
-            for chunk in chunks:
-                if chunk.embedding:
-                    score = compute_similarity(query_embedding, chunk.embedding)
-                    if score > 0.3: # Threshold
-                        scored_chunks.append((score, chunk.content))
-            
-            # 3. Sort and Select top 3
-            scored_chunks.sort(key=lambda x: x[0], reverse=True)
-            top_chunks = scored_chunks[:3]
-            
-            if top_chunks:
-                retrieved_context = "\n".join([f"- {c[1]}" for c in top_chunks])
-                retrieved_chunks = [c[1] for c in top_chunks]
-                answer_text += f"\n\nContext found:\n{retrieved_context}"
-                
-        except Exception as e:
-            print(f"RAG Retrieval failed: {e}")
-
-    # 3. Handle Out of Scope / Low Confidence
-    query_status = "answered"
-    
-    if intent.intent_type == "out_of_scope":
-        query_status = "out_of_scope"
-    elif intent.confidence < 0.6:
-        query_status = "low_confidence"
-        answer_text += " (Note: verified data for this specific query might be missing.)"
-    elif intent.intent_type == "fact_retrieval":
-        # Attempt to get real data
-        db_answer = execute_fact_retrieval(db, intent, request.question)
-        if db_answer:
-             answer_text = db_answer
+    # 2. Logic Router
+    # If the rule engine is confident, try it. 
+    # BUT if it returns "no data", we should still fall back to GenAI.
+    if intent.intent_type != "unknown" and intent.intent_type != "out_of_scope" and intent.confidence >= 0.6:
+        rule_response = handle_rule_based_query(request, db, intent)
+        
+        # Check if the rule response was actually useful
+        is_useful = True
+        if "found no matching data" in rule_response.answer: is_useful = False
+        if "not enough historical data" in rule_response.answer.lower(): is_useful = False
+        
+        if is_useful:
+            return rule_response
         else:
+            print(f"INFO: Rule Engine failed to find data. Falling back to GenAI.")
+    
+    # 3. Generative Fallback (Story 3)
+    if llm_client:
+        print(f"INFO: Triggering GenAI Fallback for: '{request.question}'")
+        try:
+            generated_sql = await llm_client.generate_sql(request.question)
+            print(f"INFO: Generated SQL: {generated_sql}")
+            
+            if generated_sql and "SELECT" in generated_sql.upper():
+                # SAFETY: Execute Read-Only? In real PROD use a read-only DB user.
+                # using text() for raw sql
+                result_rows = db.execute(text(generated_sql)).fetchall()
+                
+                # Format response blindly
+                if result_rows:
+                    formatted_rows = "\n".join([str(row) for row in result_rows])
+                    return AgentResponse(
+                        answer=f"I generated a custom query for you.\nSQL executed: `{generated_sql}`\n\nResults:\n{formatted_rows}",
+                        sources=["GEN_AI_SQL"],
+                        visualization=None,
+                        debug_meta={
+                            "generated_sql": generated_sql,
+                            "sql_result": [str(row) for row in result_rows]
+                        }
+                    )
+                else:
+                    return AgentResponse(
+                        answer=f"Query executed but returned no data.\nSQL executed: `{generated_sql}`", 
+                        sources=["GEN_AI_SQL"], 
+                        visualization=None,
+                        debug_meta={
+                            "generated_sql": generated_sql,
+                            "sql_result": []
+                        }
+                    )
+        
+        except Exception as e:
+            print(f"GenAI Error: {e}")
+            return AgentResponse(answer=f"I tried to analyze this with AI but failed: {str(e)}", sources=[], visualization=None)
+
+    # 4. Default Fallback
+    return AgentResponse(
+        answer="I'm sorry, I couldn't understand your specific request with my standard rules, and AI fallback is unavailable.",
+        sources=[],
+        visualization=None
+    )
+
+
+def handle_rule_based_query(request, db, intent):
+    """
+    Refactored legacy logic into a helper function to clean up the main handler.
+    """
+    answer_text = intent.response_text
+    fact_result = {"sources": [], "visualization": None}
+
+    # ... (Keep existing If/Else logic for fact_retrieval, forecast, etc.)
+    
+    if intent.intent_type == "fact_retrieval":
+         result_data = execute_fact_retrieval(db, intent, request.question)
+         if result_data:
+             answer_text = result_data["text"]
+             fact_result = result_data
+         else:
              answer_text += f"\n[System Note: Identified as Fact Retrieval with confidence {intent.confidence}]"
+    
     elif intent.intent_type == "forecast":
-        # Execute Forecast Logic
         db_answer = execute_forecast(db, intent, request.question)
         if db_answer:
              answer_text = db_answer
         else:
              answer_text += f"\n[System Note: Identified as Forecast with confidence {intent.confidence}]"
 
-    # 4. Log to Database
+    # Log to Database
     try:
         log_entry = IntelligenceQueryLog(
             query_text=request.question,
             detected_intent=intent.intent_type,
             confidence_score=intent.confidence,
-            status=query_status
+            status="answered"
         )
         db.add(log_entry)
         db.commit()
@@ -203,9 +250,10 @@ def query_agent(request: QueryRequest, db: Session = Depends(get_db)):
 
     return AgentResponse(
         answer=answer_text,
-        sources=[],
-        visualization=intent.data if isinstance(intent.data, dict) else None
+        sources=fact_result.get("sources", []),
+        visualization=fact_result.get("visualization")
     )
+
 
 @app.post("/ingest-knowledge")
 def ingest_knowledge(content: str, source: str, db: Session = Depends(get_db)):
@@ -296,83 +344,183 @@ def identify_intent(question: str) -> IntentResponse:
         entities={}
     )
 
-def execute_fact_retrieval(db: Session, intent: IntentResponse, question: str) -> Optional[str]:
+def execute_fact_retrieval(db: Session, intent: IntentResponse, question: str) -> Dict:
     """
     Executes a structured query against the FactValue table based on identified entities.
-    Uses Spacy for location extraction and Vectors for Metric mapping (No hardcoded rules).
+    Returns: Dict with keys 'text', 'sources'
     """
     try:
-        query = db.query(FactValue)
-        
         # 0. NLP Processing
         doc = nlp(question) if nlp else None
         
-        # 1. Geo Identification (Auto-detected via Spacy)
+        # 1. Geo Identification & Level
         geo_id = None
-        geo_level = "STATE" # Default fallback
+        geo_level = None # Strict filter if set
+        found_loc_name = None
         
+        # Keyword based Level Detection
+        q_lower = question.lower()
+        if "state" in q_lower: 
+            geo_level = "STATE"
+        elif "county" in q_lower or "counties" in q_lower: 
+            geo_level = "COUNTY"
+        elif "city" in q_lower or "cities" in q_lower or "place" in q_lower:
+            geo_level = "PLACE"
+
         if doc:
-            # Look for GPE (Geopolitical Entity)
             locations = [ent.text for ent in doc.ents if ent.label_ == "GPE"]
             if locations:
-                # Naive: take the first one found
-                found_loc = locations[0]
-                
-                # Attempt to map extracted location to FIPS code
-                lower_loc = found_loc.lower()
-                geo_id = US_STATES.get(lower_loc, found_loc)
-                
-                print(f"DEBUG: NLP Extracted Location: '{found_loc}' -> Mapped GeoID: '{geo_id}'")
-                    
-                # If we found a specific location, filter by it
-                if geo_id:
-                   query = query.filter(FactValue.geo_id == geo_id)
+                found_loc_name = locations[0]
+                lower_loc = found_loc_name.lower()
+                geo_id = US_STATES.get(lower_loc, found_loc_name)
+                # If we found a specific location, we usually don't want a "map of all states"
+                # unless explicitly asked. But specific location implies specific ID.
+                print(f"DEBUG: NLP Extracted Location: '{found_loc_name}' -> Mapped GeoID: '{geo_id}'")
 
-        # 2. Metric Identification (Dynamic Registry)
-        # We don't use 'if "price" in question'. We use embedding distance.
+        # 2. Metric Selection - Multi-Metric Support
         q_embedding = generate_embedding(question)
-        
-        best_metric_id = "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH" # Default Fallback
-        best_score = -1.0
+        relevant_metrics = [] # List of tuples (MetricMetadata, score)
         
         all_metrics = db.query(MetricMetadata).filter(MetricMetadata.embedding.isnot(None)).all()
         
+        # Hybrid Search Logic
+        q_lower = question.lower()
+        scored_metrics = []
+        
         if all_metrics:
             for m in all_metrics:
-                # Convert list to vector if needed, or rely on compute_similarity handling lists
                 score = compute_similarity(q_embedding, m.embedding)
-                if score > best_score:
-                    best_score = score
-                    best_metric_id = m.metric_id
+                
+                # Hybrid Boost
+                m_id_lower = m.metric_id.lower()
+                
+                # Broader Synonym Matching for "Cost/Price"
+                # If user asks for price, also boost cost, and vice versa.
+                money_keywords = ["price", "cost", "rate", "bill"]
+                usage_keywords = ["sales", "consumption", "usage", "kwh"]
+                
+                # Check Money related
+                if any(k in q_lower for k in money_keywords) and any(k in m_id_lower for k in money_keywords):
+                    score += 0.25
+                
+                # Check Usage related
+                if any(k in q_lower for k in usage_keywords) and any(k in m_id_lower for k in usage_keywords):
+                    score += 0.25
+
+                scored_metrics.append((m, score))
         
-        print(f"DEBUG: Semantic Metric Selection: '{best_metric_id}' (Score: {best_score:.3f})")
-        query = query.filter(FactValue.metric_id == best_metric_id)
+        # Sort and Filter
+        scored_metrics.sort(key=lambda x: x[1], reverse=True)
         
-        # 3. Ordering
-        order_asc = True
-        q_lower = question.lower()
-        if any(w in q_lower for w in ["most", "highest", "expensive", "max"]):
-            order_asc = False
-            
-        if order_asc:
-            query = query.order_by(asc(FactValue.value_numeric))
-        else:
-            query = query.order_by(desc(FactValue.value_numeric))
-            
-        # 4. Limit
-        result = query.limit(1).first()
+        # Take top metrics (threshold 0.4 or top 2 if close)
+        if scored_metrics:
+            top_score = scored_metrics[0][1]
+            for m, score in scored_metrics:
+                # Accept if score is high enough OR within 10% of top score (ambiguity handling)
+                if score > 0.45 or (score > 0.3 and score >= top_score * 0.9):
+                    relevant_metrics.append(m)
+                
+                if len(relevant_metrics) >= 3: break
         
-        if result:
-            metric_name = "Retail Price" if "PRICE" in best_metric_id else "Monthly Cost"
-            unit = "cents/kWh" if "PRICE" in best_metric_id else "USD"
+        # Fallback
+        if not relevant_metrics:
+            # Default to Price if nothing matches relevantly
+            fallback = next((m for m in all_metrics if "PRICE" in m.metric_id), None)
+            if fallback: relevant_metrics.append(fallback)
+
+        results_text_parts = []
+        collected_sources = set()
+        visualization_data = None
+
+        # 3. Query for each relevant metric
+        for metric in relevant_metrics:
+            base_query = db.query(FactValue).filter(FactValue.metric_id == metric.metric_id)
             
-            # Resolve State Name from FIPS for display
-            display_loc = FIPS_TO_NAME.get(result.geo_id, result.geo_id)
-            loc_str = f"in {display_loc}" if result.geo_id else ""
+            # Apply Geo Level Filter if Detected
+            if geo_level:
+                base_query = base_query.filter(FactValue.geo_level == geo_level)
             
-            return f"The {geo_level.lower()} {loc_str} with the {'lowest' if order_asc else 'highest'} {metric_name} is {display_loc} ({result.geo_id}) with a value of {result.value_numeric} {unit} (Period: {str(result.period_start)[:10]})."
-        else:
-            return "I couldn't find any data matching those criteria in the database."
+            if geo_id:
+                # Specific Location Requested
+                result = base_query.filter(FactValue.geo_id == geo_id).order_by(desc(FactValue.period_start)).first()
+                if result:
+                    display_loc = FIPS_TO_NAME.get(result.geo_id, result.geo_id)
+                    results_text_parts.append(
+                        f"- **{metric.display_name or metric.metric_id}**: {result.value_numeric} {metric.unit_label} in {display_loc} ({str(result.period_start)[:7]})"
+                    )
+                    if metric.source_system: collected_sources.add(metric.source_system)
+            else:
+                # No specific location -> Check for List/Map intent or just Min/Max
+                latest_entry = base_query.order_by(desc(FactValue.period_start)).first()
+                if latest_entry:
+                    latest_date = latest_entry.period_start
+                    date_query = base_query.filter(FactValue.period_start == latest_date)
+                    
+                    # Visualization / List Intent Support
+                    # If user asks for "across states", "map", "compare", we return full dataset for UI
+                    viz_keywords = ["map", "chart", "graph", "compare", "across", "list", "distribution"]
+                    is_viz_intent = any(k in question.lower() for k in viz_keywords)
+
+                    if is_viz_intent:
+                        all_vals = date_query.all()
+                        if all_vals:
+                            results_text_parts.append(
+                                f"- **{metric.display_name or metric.metric_id}** ({str(latest_date)[:7]}): "
+                                f"Retrieved data for {len(all_vals)} locations. See visualization below."
+                            )
+                            
+                            # Construct Visualization Payload
+                            points = []
+                            for row in all_vals:
+                                points.append({
+                                    "geoId": row.geo_id,
+                                    "value": row.value_numeric,
+                                    "name": FIPS_TO_NAME.get(row.geo_id, row.geo_id), # Try resolve, else RAW ID
+                                    "geoLevel": row.geo_level
+                                })
+                            
+                            # Only set viz data if empty (priority to first metric)
+                            if not visualization_data:
+                                visualization_data = {
+                                    "type": "choropleth_map" if geo_level == "STATE" else "bar_chart",
+                                    "title": f"{metric.display_name} by {geo_level or 'Location'}",
+                                    "metric": metric.display_name or metric.metric_id,
+                                    "unit": metric.unit_label,
+                                    "data": points
+                                }
+                            
+                            if metric.source_system: collected_sources.add(metric.source_system)
+                            continue # Skip Min/Max if we did viz
+
+                    # Default: Find Min/Max for this date
+                    min_val = date_query.order_by(asc(FactValue.value_numeric)).first()
+                    max_val = date_query.order_by(desc(FactValue.value_numeric)).first()
+                    
+                    if min_val and max_val:
+                         min_loc = FIPS_TO_NAME.get(min_val.geo_id, min_val.geo_id)
+                         max_loc = FIPS_TO_NAME.get(max_val.geo_id, max_val.geo_id)
+                         
+                         results_text_parts.append(
+                             f"- **{metric.display_name or metric.metric_id}** ({str(latest_date)[:7]}): "
+                             f"Range: {min_val.value_numeric} - {max_val.value_numeric} {metric.unit_label}. "
+                             f"(Lowest: {min_loc}, Highest: {max_loc})"
+                         )
+                         if metric.source_system: collected_sources.add(metric.source_system)
+
+        if not results_text_parts:
+            return {"text": "I checked the database but found no matching data for your request.", "sources": []}
+            
+        final_intro = "Here is the latest data I found:" if not geo_id else f"Here is the data for {found_loc_name}:"
+        
+        return {
+            "text": final_intro + "\n" + "\n".join(results_text_parts),
+            "sources": list(collected_sources),
+            "visualization": visualization_data
+        }
+            
+    except Exception as e:
+        print(f"DB Query Error: {e}")
+        return None
             
     except Exception as e:
         print(f"DB Query Error: {e}")
@@ -394,6 +542,14 @@ def execute_forecast(db: Session, intent: IntentResponse, question: str) -> Opti
         if all_metrics:
             for m in all_metrics:
                 score = compute_similarity(q_embedding, m.embedding)
+                
+                 # Hybrid Search
+                q_lower_check = question.lower()
+                m_id_lower = m.metric_id.lower()
+                if "price" in q_lower_check and "price" in m_id_lower: score += 0.2
+                if "cost" in q_lower_check and "cost" in m_id_lower: score += 0.2
+                if "sales" in q_lower_check and "sales" in m_id_lower: score += 0.2
+                
                 if score > best_score:
                     best_score = score
                     best_metric_id = m.metric_id

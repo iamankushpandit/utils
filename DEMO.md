@@ -10,10 +10,11 @@ Demonstrate the project locally with provenance, transparency, and "no invented 
 
 ---
 
-## Step 1 — Start backend + database
+## Step 1 — Start backend + database + AI Mesh
 ```bash
 docker compose up -d --build
 ```
+*Note: This starts the `llm-mesh` container (Ollama) which downloads the `qwen2.5-coder:1.5b` model (~1GB) on first run. Please wait for the download to complete.*
 
 Validate:
 ```bash
@@ -45,7 +46,22 @@ Open: [http://localhost:5173](http://localhost:5173)
 
 ---
 
-## Step 4 — Workflow: Map + legend + provenance
+## Step 4 — Workflow: Natural Language Intelligence
+
+* Navigate to `/explorer` (or the main chat interface)
+* Try asking natural language questions:
+  * "What is the average retail price for the US?" (Uses GenAI Fallback)
+  * "Show me the electricity retail price for California." (Uses Fast Regex Rules)
+  * "How many counties have data?" (Uses GenAI SQL Generation)
+  * "Forecast the electricity price for Texas in 2026." (Uses Forecasting Engine)
+
+* Observe the "Hybrid AI" in action:
+  * Simple queries execute instantly (<0.5s).
+  * Complex queries trigger the Local LLM ("Thinking...") and return accurate SQL-derived answers (~3-5s).
+
+---
+
+## Step 5 — Workflow: Map + legend + provenance
 
 * Navigate to `/`
 * Select metric: "Electricity Retail Price (cents/kWh)"

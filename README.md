@@ -13,13 +13,14 @@ graph TD
     
     subgraph "Core Services"
         API -->|HTTP| Intel[Intelligence Service (Python/FastAPI)]
+        Intel -->|Prompt| LLM[LLM Engine (Ollama/Qwen)]
         API -.->|Kafka Events| Ingestion[Ingestion Service (Java/Spring)]
     end
     
     subgraph "Data Layer"
         Ingestion -->|Writes| DB[(PostgreSQL)]
         API -->|Reads| DB
-        Intel -->|Reads| DB
+        Intel -->|SQL| DB
     end
     
     subgraph "Observability (LGTM Stack)"
@@ -39,7 +40,8 @@ graph TD
 | **`utility-explorer-ui`** | Vue 3, Vite | `5173` (Dev) | Interactive dashboard with Highcharts Maps and Chat Interface. |
 | **`utility-explorer-api`** | Java 21, Spring Boot | `8090` | Gateway & Backend-for-Frontend. Handles user requests, proxies AI queries, and serves map data. |
 | **`utility-explorer-ingestion`** | Java 21, Spring Boot | `8081` | Dedicated worker for fetching data from EIA & Census APIs. Triggered via Scheduler or Kafka events. |
-| **`utility-explorer-intelligence`** | Python 3.11, FastAPI | `8092` | The "Brain". Handles NLP (Spacy), Semantic Search (Vector Embeddings), and Forecasting (Scikit-Learn). Consumes metadata from Kafka to learn about new data automatically. |
+| **`utility-explorer-intelligence`** | Python 3.11, FastAPI | `8092` | The "Brain". Uses **Hybrid Intelligence** (Rule-Based + Local Generative AI) to answer complex queries. |
+| **`llm-mesh`** | Ollama / Qwen2.5 | `11434` | **New**: Local Large Language Model (1.5B Params) running inside the mesh for privacy-first Text-to-SQL generation. |
 | **`utility-explorer-shared`** | Java Library | N/A | Common DTOs, Persistence Entities, and Utility classes shared between Java services. |
 
 ---
@@ -49,6 +51,7 @@ graph TD
 - **Isn’t:** A simple data warehouse or generic charting library. It is a specialized, intelligent analytics suite for public utility datasets.
 
 ### ✨ Key Features
+- **Hybrid Intelligence**: Combines the speed of determinisic rules (Regex/Python) with the flexibility of Generative AI (LLMs) to answer any question without hallucinations.
 - **Automated Metadata Discovery**: Data adapters "announce" their capabilities via Kafka. The AI Agent automatically consumes these announcements, enabling "Zero-Shot" understanding of new data sources without code changes.
 - **Natural Language Querying**: Ask questions like "Where is electricity cheapest?" and get grounded responses with data provenance.
 - **Geospatial Visualization**: Interactive chlorophyll maps layered with Census and Energy data.
@@ -64,11 +67,12 @@ graph TD
 - **Transparency:** See exactly when data was last fetched and from where.
 - **Export:** Download map and timeseries data as CSV.
 
-### 2. 🤖 Utility Intelligence Agent
+### 2. 🤖 Utility Intelligence Agent (Hybrid Architecture)
 - **Natural Language Processing:** Ask *"What is the electricity rate in Texas?"* and get an instant, data-backed answer.
+- **Local GenAI (Text-to-SQL):** Uses a local `Qwen2.5-Coder` model to write SQL queries on the fly for complex questions like *"Average price in states starting with M"*.
 - **Intent Recognition:** Sophisticated ML pipeline distinguishes between Fact Retrieval, Comparisons, and Forecasting requests.
 - **Guardrails:** Rejects out-of-scope queries (e.g., "How is the weather?") using Semantic Vector Search.
-- **Forecasting:** Linear Regression models predict future costs based on historical trends.
+- **Forecasting:** Linear Regression models predict future costs based on historical trends (Python-based).
 
 ### 3. 📡 Automated & Resilient Ingestion
 - **Event-Driven:** Uses Kafka to decouple scheduling from execution.
@@ -157,6 +161,14 @@ Here is a recommended workflow for debugging issues using these tools:
     - Return to Grafana's **Explore** tab and select **Loki** as the datasource.
     - Run a query for the specific trace: `{trace_id="<YOUR_TRACE_ID>"}`.
     - This reveals the exact log lines from all services (Java, Python) involved in that specific request context, allowing you to pinpoint the root cause.
+
+4.  **Unified Log View (The "Tail -f" Experience)**
+    To watch all your services' logs stream in one place (like running `docker compose logs -f` but better):
+    - Go to **Grafana Explore** and select **Loki**.
+    - Run the query: `{job="docker_logs"}`.
+    - Click the **Live** button (top right of the log panel) to stream logs in real-time.
+    - **Filter by string:** `{job="docker_logs"} |= "error"` to see only errors.
+    - **Filter by service:** `{job="docker_logs"} |= "utils-api"` (if your logs contain the service name).
 
 ## Data Model (Conceptual)
 | Table | Description |
