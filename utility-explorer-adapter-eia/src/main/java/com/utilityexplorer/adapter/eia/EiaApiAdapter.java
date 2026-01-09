@@ -181,5 +181,25 @@ public class EiaApiAdapter implements IngestionAdapter {
             System.err.println("Error parsing EIA response: " + e.getMessage());
         }
     }
+
+    @Override
+    public java.util.List<com.utilityexplorer.shared.dto.MetricDefinition> getMetricDefinitions() {
+        return java.util.List.of(
+            new com.utilityexplorer.shared.dto.MetricDefinition(
+                "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH",
+                "Average retail price of electricity for residential customers. This metric tracks the cost per kilowatt-hour.",
+                "cents/kWh",
+                "Retail Electricity Price",
+                getAdapterId()
+            ),
+             new com.utilityexplorer.shared.dto.MetricDefinition(
+                "ELECTRICITY_TOTAL_SALES_KWH",
+                "Total sales of electricity to ultimate customers.",
+                "kWh",
+                "Electricity Sales",
+                getAdapterId()
+            )
+        );
+    }
 }
 

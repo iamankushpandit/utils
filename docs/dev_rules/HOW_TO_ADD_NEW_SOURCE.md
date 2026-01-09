@@ -60,6 +60,17 @@ public class NewSourceAdapter implements IngestionAdapter {
     }
 
     @Override
+    public List<MetricDefinition> getMetricDefinitions() {
+        // Announce what this adapter provides (for AI discovery)
+        MetricDefinition def = new MetricDefinition();
+        def.setMetricId("NEW_DATA_METRIC_ID"); // matches config
+        def.setDescription("Description for the AI to understand this metric.");
+        def.setUnit("unit_label");
+        // ... optional metadata
+        return List.of(def);
+    }
+
+    @Override
     public void fetchAndPublish(String metricId, Map<String, String> params) {
         // 1. CALL EXTERNAL API
         // 2. TRANSFORM RESPONSE
@@ -75,6 +86,10 @@ public class NewSourceAdapter implements IngestionAdapter {
     }
 }
 ```
+
+### 3.1 Metadata Broadcasting (AI Discovery)
+
+New adapters **must** implement `getMetricDefinitions()`. This method is called on startup by the `MetadataBroadcaster`. The definitions are sent to a Kafka topic (`system.metadata.metrics`) which the Python Intelligence Service consumes. This allows the AI agent to "learn" about the new data source automatically without code changes in the Python service.
 
 ### 4. Register the Adapter
 

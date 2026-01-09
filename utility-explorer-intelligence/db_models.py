@@ -35,3 +35,14 @@ class FactValue(Base):
     period_end = Column(DateTime, primary_key=True)
     
     value_numeric = Column(Float, nullable=False)
+
+class MetricMetadata(Base):
+    __tablename__ = "metric_metadata"
+
+    metric_id = Column(String, primary_key=True)
+    description = Column(Text, nullable=False)
+    unit_label = Column(String, nullable=True)
+    display_name = Column(String, nullable=True)
+    source_system = Column(String, nullable=True)
+    embedding = Column(ARRAY(Float), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -107,6 +107,8 @@ def test_query_agent_utility_success(client, mocker):
         entities={}
     )
     mocker.patch('main.identify_intent', return_value=mock_intent)
+    # Mock execute_fact_retrieval to return None so it falls back to response_text
+    mocker.patch('main.execute_fact_retrieval', return_value=None) 
 
     response = client.post("/query", json={"question": "What is the electricity price?"})
     assert response.status_code == 200

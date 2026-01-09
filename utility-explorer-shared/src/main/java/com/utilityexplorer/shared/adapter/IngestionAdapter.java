@@ -1,6 +1,8 @@
 package com.utilityexplorer.shared.adapter;
 
 import com.utilityexplorer.shared.persistence.Metric;
+import com.utilityexplorer.shared.dto.MetricDefinition;
+import java.util.List;
 
 public interface IngestionAdapter {
     /**
@@ -14,4 +16,10 @@ public interface IngestionAdapter {
      * @param metric The metadata defining what to fetch (series ID, variable name, etc.)
      */
     void collect(Metric metric);
+
+    /**
+     * Returns the definitions of all metrics managed by this adapter.
+     * Used for automated metadata discovery.
+     */
+    List<MetricDefinition> getMetricDefinitions();
 }

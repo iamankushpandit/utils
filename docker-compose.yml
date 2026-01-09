@@ -35,6 +35,16 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
 
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka-setup
+    depends_on:
+      - kafka
+    command: "bash -c 'echo Waiting for Kafka to be ready... && \
+      cub kafka-ready -b kafka:29092 1 20 && \
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic system.metadata.metrics --config cleanup.policy=compact && \
+      echo Topic created.'"
+
   # ==========================================
   # Observability Stack (LGTM)
   # ==========================================

@@ -39,7 +39,7 @@ graph TD
 | **`utility-explorer-ui`** | Vue 3, Vite | `5173` (Dev) | Interactive dashboard with Highcharts Maps and Chat Interface. |
 | **`utility-explorer-api`** | Java 21, Spring Boot | `8090` | Gateway & Backend-for-Frontend. Handles user requests, proxies AI queries, and serves map data. |
 | **`utility-explorer-ingestion`** | Java 21, Spring Boot | `8081` | Dedicated worker for fetching data from EIA & Census APIs. Triggered via Scheduler or Kafka events. |
-| **`utility-explorer-intelligence`** | Python 3.11, FastAPI | `8092` | The "Brain". Handles NLP (Spacy), Semantic Search (Vector Embeddings), and Forecasting (Scikit-Learn). |
+| **`utility-explorer-intelligence`** | Python 3.11, FastAPI | `8092` | The "Brain". Handles NLP (Spacy), Semantic Search (Vector Embeddings), and Forecasting (Scikit-Learn). Consumes metadata from Kafka to learn about new data automatically. |
 | **`utility-explorer-shared`** | Java Library | N/A | Common DTOs, Persistence Entities, and Utility classes shared between Java services. |
 
 ---
@@ -47,6 +47,12 @@ graph TD
 ## 🎯 Scope: What It Is / Isn’t
 - **Is:** A distributed web platform to browse metrics by geography, drill into states/counties, export CSV, consult an AI agent, and monitor system health via observability dashboards.
 - **Isn’t:** A simple data warehouse or generic charting library. It is a specialized, intelligent analytics suite for public utility datasets.
+
+### ✨ Key Features
+- **Automated Metadata Discovery**: Data adapters "announce" their capabilities via Kafka. The AI Agent automatically consumes these announcements, enabling "Zero-Shot" understanding of new data sources without code changes.
+- **Natural Language Querying**: Ask questions like "Where is electricity cheapest?" and get grounded responses with data provenance.
+- **Geospatial Visualization**: Interactive chlorophyll maps layered with Census and Energy data.
+
 
 ---
 

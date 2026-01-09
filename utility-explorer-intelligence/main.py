@@ -4,7 +4,7 @@ from sqlalchemy import text, desc, asc
 from sqlalchemy.orm import Session
 from database import get_db, engine, Base
 from models import IntentRequest, IntentResponse
-from db_models import IntelligenceQueryLog, KnowledgeChunk, FactValue
+from db_models import IntelligenceQueryLog, KnowledgeChunk, FactValue, MetricMetadata
 from embeddings import generate_embedding, compute_similarity
 import joblib
 import os
@@ -14,6 +14,8 @@ from sklearn.linear_model import LinearRegression
 import numpy as np
 import datetime
 import spacy
+import asyncio
+from metadata_consumer import consume_metadata
 
 # Helper: US State Name to Code Mapping (FIPS Codes as stored in DB)
 US_STATES = {
@@ -48,6 +50,9 @@ nlp = None
 async def lifespan(app: FastAPI):
     # Create tables if they don't exist
     Base.metadata.create_all(bind=engine)
+    
+    # Start Metadata Listener (Background Task)
+    asyncio.create_task(consume_metadata())
     
     # Load ML Model
     global intent_model
@@ -323,27 +328,22 @@ def execute_fact_retrieval(db: Session, intent: IntentResponse, question: str) -
                 if geo_id:
                    query = query.filter(FactValue.geo_id == geo_id)
 
-        # 2. Metric Identification (Semantic Match - logic scalable to new domains)
+        # 2. Metric Identification (Dynamic Registry)
         # We don't use 'if "price" in question'. We use embedding distance.
-        
-        available_metrics = {
-            "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH": "electricity retail price rate cost per kwh energy charge",
-            "ELECTRICITY_MONTHLY_COST_USD_ACS": "average monthly electricity bill cost amount total usd dollars"
-            # Future: "WIND_SPEED": "wind velocity speed turbine"
-        }
-        
-        best_metric_id = "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH"
-        best_score = -1.0
-        
-        # We embed the question (semantic search against our catalog)
         q_embedding = generate_embedding(question)
         
-        for m_id, description in available_metrics.items():
-            desc_embedding = generate_embedding(description)
-            score = compute_similarity(q_embedding, desc_embedding)
-            if score > best_score:
-                best_score = score
-                best_metric_id = m_id
+        best_metric_id = "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH" # Default Fallback
+        best_score = -1.0
+        
+        all_metrics = db.query(MetricMetadata).filter(MetricMetadata.embedding.isnot(None)).all()
+        
+        if all_metrics:
+            for m in all_metrics:
+                # Convert list to vector if needed, or rely on compute_similarity handling lists
+                score = compute_similarity(q_embedding, m.embedding)
+                if score > best_score:
+                    best_score = score
+                    best_metric_id = m.metric_id
         
         print(f"DEBUG: Semantic Metric Selection: '{best_metric_id}' (Score: {best_score:.3f})")
         query = query.filter(FactValue.metric_id == best_metric_id)
@@ -384,23 +384,19 @@ def execute_forecast(db: Session, intent: IntentResponse, question: str) -> Opti
     Uses Spacy for location extraction to support any location dynamically.
     """
     try:
-        # 1. Metric Mapping (Reusing smart semantic mapping)
-        available_metrics = {
-            "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH": "electricity retail price rate cost per kwh energy charge",
-            "ELECTRICITY_MONTHLY_COST_USD_ACS": "average monthly electricity bill cost amount total usd dollars"
-        }
+        # 1. Metric Mapping (Dynamic Registry)
+        q_embedding = generate_embedding(question)
         
-        best_metric_id = "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH" # Default
+        best_metric_id = "ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH" # Default Fallback
         best_score = -1.0
         
-        # Embed query to find best matching metric
-        q_embedding = generate_embedding(question)
-        for m_id, description in available_metrics.items():
-            desc_embedding = generate_embedding(description)
-            score = compute_similarity(q_embedding, desc_embedding)
-            if score > best_score:
-                best_score = score
-                best_metric_id = m_id
+        all_metrics = db.query(MetricMetadata).filter(MetricMetadata.embedding.isnot(None)).all()
+        if all_metrics:
+            for m in all_metrics:
+                score = compute_similarity(q_embedding, m.embedding)
+                if score > best_score:
+                    best_score = score
+                    best_metric_id = m.metric_id
         
         metric_id = best_metric_id
 

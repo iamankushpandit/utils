@@ -165,6 +165,19 @@ public class AcsApiAdapter implements IngestionAdapter {
             System.err.println("Error parsing ACS response: " + e.getMessage());
         }
     }
+
+    @Override
+    public java.util.List<com.utilityexplorer.shared.dto.MetricDefinition> getMetricDefinitions() {
+        return java.util.List.of(
+            new com.utilityexplorer.shared.dto.MetricDefinition(
+                "ELECTRICITY_MONTHLY_COST_USD_ACS",
+                "Average monthly electricity bill for occupied housing units.",
+                "USD",
+                "Avg Monthly Bill",
+                getAdapterId()
+            )
+        );
+    }
 }
 
 

@@ -1,11 +1,19 @@
 # PROJECT_STATE.md — Utility Explorer
 
 ## Current status (as of 2026-01-08)
-- Phase: Phase 1 Refactor (COMPLETED) - Multi-Module Architecture & Extensibility
-- Repo layout: Maven Multi-Module (`parent`, `api`, `shared`)
-- Local run: Docker Compose + Spring Boot + Vue UI fully functional
+- Phase: Phase 4 Implementation - Automated Metadata Discovery (Stories 10-14)
+- Repo layout: Maven Multi-Module (`parent`, `api`, `shared`, `adapters`, `ingestion`) + Microservices (`intelligence`)
+- Architecture: Event-Driven Metadata Broadcasting (Spring Boot -> Kafka -> Python Consumer -> Vector DB)
 
 ## Change Log (Recent)
+### Phase 4: Automated Metadata Discovery (Jan 2026)
+- **Story 10 (Metadata Schema)**: Defined `MetricMetadata` schema in Postgres and shared DTOs for Kafka messages.
+- **Story 11 (Adapter Interface)**: Updated `IngestionAdapter` interface to include `getMetricDefinitions()`.
+- **Story 12 (Metadata Broadcast)**: Implemented `MetadataBroadcaster` in Ingestion Service to auto-announce available metrics to `system.metadata.metrics` topic on startup.
+- **Story 13 (AI Consumption)**: Implemented Kafka Consumer in Intelligence Service (`metadata_consumer.py`) to listen for new metrics and upsert into `MetricMetadata` table.
+- **Story 14 (Semantic Routing)**: Refactored Intelligence Service (`main.py`) to usage dynamic `MetricMetadata` for routing user queries instead of hardcoded rules.
+- **Testing**: Added `test_intelligence.sh` to verify NLP and metadata flow.
+
 ### Phase 3: Intelligence Service (Started Jan 2026)
 - **Story 1 (Infrastructure)**: Scaffolded `utility-explorer-intelligence` (Python/FastAPI) and added to Docker mesh (Port 8092).
 - **Story 2 (Gateway)**: COMPLETED. Java API proxies requests to Python Service. Fallback logic confirmed. Integration Tests updated.
