@@ -42,7 +42,9 @@
     
     <div v-if="response" class="response-section">
       <div class="response-header">
-        <h4>{{ response.summary }}</h4>
+        <!-- Markdown Answer -->
+        <div class="markdown-answer" v-html="renderMarkdown(response.summary)"></div>
+        
         <div class="header-badges">
           <span :class="['status-badge', response.status.toLowerCase()]">
             {{ response.status }}
@@ -52,6 +54,20 @@
           </span>
         </div>
       </div>
+      
+      <!-- Debug / Thinking Toggle -->
+      <div v-if="response.debug_meta && response.debug_meta.generated_sql" class="debug-toggle-area">
+        <button @click="toggleThinking" class="toggle-thinking-btn">
+          {{ showThinking ? 'Hide SQL' : 'Show SQL Logic' }}
+        </button>
+        <div v-if="showThinking" class="thinking-box">
+          <pre><code>{{ response.debug_meta.generated_sql }}</code></pre>
+          <div v-if="response.debug_meta.sql_result" class="raw-result">
+            <small>Raw Rows: {{ response.debug_meta.sql_result.length }}</small>
+          </div>
+        </div>
+      </div>
+
       
       <div v-if="response.table" class="results-table">
         <table>
@@ -131,6 +147,7 @@
 -->
 <script>
 import { apiService } from '../services/api.js'
+import { marked } from 'marked'
 
 export default {
   name: 'UtilAgentPanel',
@@ -141,6 +158,7 @@ export default {
       loading: false,
       error: null,
       feedbackSent: false,
+      showThinking: false,
       apiKey: 'dev_key_change_me', // In real app, this would be from config/auth
       examples: [
         'show me the latest electricity data',
@@ -153,18 +171,44 @@ export default {
     async submitQuery() {
       if (!this.question.trim()) return
       
+      this.loading = true
+      this.error = null
+      this.response = null
+      this.feedbackSent = false
+      this.showThinking = false
+
       try {
-        this.loading = true
-        this.error = null
-        this.response = null
-        this.feedbackSent = false
+        // Use the generic queryAgent wrapper, or queryUtilAgent if that's what is in api.js
+        // Based on previous file reads, it seems 'queryUtilAgent' is used here, but let's stick to the existing method call pattern
+        // The read_file showed: this.response = await apiService.queryUtilAgent(this.question, this.apiKey)
+        const rawRes = await apiService.queryUtilAgent(this.question, this.apiKey)
         
-        this.response = await apiService.queryUtilAgent(this.question, this.apiKey)
+        // Enrich
+        this.response = {
+          ...rawRes,
+          summary: rawRes.answer,
+          status: rawRes.sources?.length ? 'SUCCESS' : 'NO_DATA',
+          responseOrigin: rawRes.sources?.includes('GEN_AI_SQL') ? 'GenAI' : 'RuleEngine'
+        }
+
       } catch (err) {
         this.error = err.response?.data?.message || 'Failed to get response from Util Agent'
         console.error(err)
       } finally {
         this.loading = false
+      }
+    },
+
+    toggleThinking() {
+      this.showThinking = !this.showThinking
+    },
+
+    renderMarkdown(text) {
+      if (!text) return ''
+      try {
+        return marked.parse(text)
+      } catch (e) {
+        return text
       }
     },
 
@@ -448,5 +492,55 @@ export default {
     color: var(--green);
     font-size: 0.9rem;
     font-style: italic;
+}
+
+/* Added via script for LLM support */
+.markdown-answer {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: var(--ink);
+  margin-bottom: 1rem;
+}
+.markdown-answer p {
+  margin-bottom: 0.75rem;
+}
+.markdown-answer code {
+  background: #f4f4f4;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: monospace;
+}
+.markdown-answer pre {
+  background: #f4f4f4;
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.debug-toggle-area {
+  margin: 1rem 0;
+}
+.toggle-thinking-btn {
+  background: none;
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.75rem;
+  border-radius: 99px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--ink-muted);
+}
+.toggle-thinking-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.thinking-box {
+  margin-top: 0.5rem;
+  background: #2d2d2d;
+  color: #ccc;
+  padding: 1rem;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 0.9rem;
+  overflow-x: auto;
 }
 </style>

@@ -65,7 +65,10 @@
                   {{ source.enabled ? 'Enabled' : 'Disabled' }}
                 </span>
               </td>
-              <td class="schedule">{{ source.scheduleCron || 'Not configured' }}</td>
+              <td class="schedule">
+                <div class="schedule-main">{{ getScheduleStatus(source.sourceId) || source.scheduleCron || 'Not configured' }}</div>
+                <div v-if="getNextRun(source.sourceId)" class="schedule-next">{{ getNextRun(source.sourceId) }}</div>
+              </td>
               <td class="timestamp">{{ formatTimestamp(source.lastSuccessAt) }}</td>
               <td>
                 <div v-if="source.lastRun" class="last-run">
@@ -204,7 +207,17 @@ export default {
     formatTimestamp(timestamp) {
       if (!timestamp) return 'Never'
       return new Date(timestamp).toLocaleString()
-    }
+    },
+
+    getNextRun(sourceId) {
+      const source = this.sources.find(s => s.sourceId === sourceId)
+      return source ? source.nextRunAt : null
+    },
+
+    getScheduleStatus(sourceId) {
+      const source = this.sources.find(s => s.sourceId === sourceId)
+      return source ? source.scheduleStatus : null
+    },
   }
 }
 </script>
@@ -458,6 +471,17 @@ th {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.schedule-main {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.schedule-next {
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  margin-top: 0.25rem;
 }
 
 ul {

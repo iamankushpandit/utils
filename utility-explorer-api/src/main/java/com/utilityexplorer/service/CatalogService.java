@@ -21,6 +21,12 @@ public class CatalogService {
 
     @Autowired
     private FactValueRepository factValueRepository;
+
+    @Autowired
+    private SourceConfigRepository sourceConfigRepository;
+
+    @Autowired
+    private SourceRunRepository sourceRunRepository;
     
     public List<MetricDto> getAllMetrics() {
         return metricRepository.findAll().stream()
@@ -67,6 +73,25 @@ public class CatalogService {
     }
     
     private SourceDto toSourceDto(Source source) {
+        Optional<SourceConfig> config = sourceConfigRepository.findById(source.getSourceId());
+        Optional<SourceRun> lastRun = sourceRunRepository.findLatestBySourceId(source.getSourceId());
+
+        String scheduleStatus = "Unknown";
+        String nextRunAt = null;
+
+        if (config.isPresent()) {
+            SourceConfig c = config.get();
+            if (!c.getEnabled()) {
+                scheduleStatus = "Disabled";
+            } else {
+                scheduleStatus = "Scheduled: " + describeCron(c.getScheduleCron());
+                // Simple next run estimation (just description for now as full cron parsing needs more libs)
+                nextRunAt = "Follows schedule " + c.getScheduleCron();
+            }
+        }
+
+        String lastRunAt = lastRun.map(r -> r.getStartedAt().toString()).orElse(null);
+
         return new SourceDto(
             source.getSourceId(),
             source.getName(),
@@ -74,7 +99,18 @@ public class CatalogService {
             source.getTermsUrl(),
             source.getAttributionText(),
             source.getNotes(),
-            source.isMock()
+            source.isMock(),
+            scheduleStatus,
+            lastRunAt,
+            nextRunAt
         );
+    }
+
+    private String describeCron(String cron) {
+        if ("0 0 9 * * MON".equals(cron)) return "Weekly on Monday at 9 AM UTC";
+        if ("0 0 9 1 * *".equals(cron)) return "Monthly on 1st at 9 AM UTC";
+        if ("0 0 9 15 * *".equals(cron)) return "Monthly on 15th at 9 AM UTC";
+        if ("0 0 6 * * *".equals(cron)) return "Daily at 6 AM UTC";
+        return cron;
     }
 }

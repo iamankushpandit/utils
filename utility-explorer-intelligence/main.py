@@ -168,7 +168,11 @@ async def query_agent(request: QueryRequest, db: Session = Depends(get_db)):
     if llm_client:
         print(f"INFO: Triggering GenAI Fallback for: '{request.question}'")
         try:
-            generated_sql = await llm_client.generate_sql(request.question)
+            # FLEXIBILITY: Fetch current metrics from DB to inform the LLM
+            metrics_list = db.query(MetricMetadata).all()
+            metrics_context = "\n".join([f"- {m.metric_id} ({m.display_name})" for m in metrics_list])
+            
+            generated_sql = await llm_client.generate_sql(request.question, metrics_context)
             print(f"INFO: Generated SQL: {generated_sql}")
             
             if generated_sql and "SELECT" in generated_sql.upper():

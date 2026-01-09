@@ -38,17 +38,19 @@ class LLMClient:
             logger.error(f"LLM Generation failed: {e}")
             return None
 
-    async def generate_sql(self, question: str) -> str:
+    async def generate_sql(self, question: str, metrics_list: str = "") -> str:
         """
         Story 3: Text-to-SQL Spec
         Generates a SQL query based on the fixed schema definition.
         """
-        schema_context = """
+        schema_context = f"""
         You are a Postgres SQL Expert. 
         Given the following database schema for a Utility Data Application:
 
         1. Table: fact_value
-           - metric_id (VARCHAR): The type of data. Examples: 'ELECTRICITY_RETAIL_PRICE_CENTS_PER_KWH', 'AVG_MONTHLY_BILL_DOLLARS'
+           - metric_id (VARCHAR): The type of data.
+             Available Metrics:
+             {metrics_list}
            - geo_id (VARCHAR): FIPS code for state (e.g. '48') or place (e.g. '2913600').
            - geo_level (VARCHAR): Either 'STATE' or 'PLACE' or 'COUNTY'.
            - period_start (TIMESTAMP): The date of the data point.

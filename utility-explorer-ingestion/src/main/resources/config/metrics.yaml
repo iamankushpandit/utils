@@ -6,5 +6,34 @@ categories:
   - id: "BROADBAND"
     name: "Internet Access"
     icon: "wifi"
+  - id: "WEATHER"
+    name: "Weather Insights"
+    icon: "cloud"
 
-metrics: []
+metrics:
+  - id: "WEATHER_STRESS_INDEX"
+    name: "Weather Stress Index (0-100)"
+    description: "Composite score of cold/heat stress and alerts."
+    unit: "Score"
+    category: "WEATHER"
+    sourceId: "WEATHER_INSIGHTS_API"
+    ingestion:
+      adapter: "WEATHER_INSIGHTS"
+
+  - id: "TEMP_CURRENT_F"
+    name: "Current Temperature"
+    description: "Real-time observed temperature."
+    unit: "degF"
+    category: "WEATHER"
+    sourceId: "WEATHER_INSIGHTS_API"
+    ingestion:
+      adapter: "WEATHER_INSIGHTS"
+
+  - id: "TEMP_ANOMALY_F"
+    name: "Temperature Anomaly"
+    description: "Deviation from 30-year baseline."
+    unit: "deltaF"
+    category: "WEATHER"
+    sourceId: "WEATHER_INSIGHTS_API"
+    ingestion:
+      adapter: "WEATHER_INSIGHTS"

@@ -118,7 +118,35 @@ If your source requires an API Key:
     ```
 3.  Inject it into your adapter class using `@Value("${NEW_SOURCE_API_KEY}")`.
 
-### 6. Verify
+### 6. Configure Database & Schedule (Important)
+
+You must register your source in the database to control its execution schedule and display transparency metadata (e.g. "Daily at 6 AM").
+Create a Flyway migration script in `utility-explorer-api/src/main/resources/db/migration/` (e.g., `V26__Enable_My_Source.sql`):
+
+```sql
+INSERT INTO source_config (source_id, enabled, schedule_cron, timezone, check_strategy, max_lookback_periods, updated_at)
+VALUES (
+    'NEW_SOURCE_API', 
+    true, 
+    '0 0 6 * * *', -- Daily at 6am UTC (Enables the "Daily" badge in UI)
+    'UTC', 
+    'INGEST_ALWAYS', 
+    1,
+    NOW()
+)
+ON CONFLICT (source_id) DO UPDATE SET
+    schedule_cron = EXCLUDED.schedule_cron;
+```
+
+### 7. Geography & Data Standards
+
+*   **GeoID Format**: The system strictly uses **FIPS Codes** for state and county identification.
+    *   **Do NOT** use Postal Codes (e.g., "AL").
+    *   **DO** use FIPS Codes (e.g., "01" for Alabama).
+    *   If your external source provides postal codes, map them to FIPS in your adapter (see `WeatherAdapter.java` for a `STATE_FIPS` map example).
+*   **Values**: Ensure numeric values are valid and units match the definition.
+
+### 8. Verify
 
 1.  Rebuild the project: `mvn clean install`.
 2.  Restart the stack: `./setup.sh`.
@@ -127,6 +155,36 @@ If your source requires an API Key:
     curl -X POST http://localhost:8090/api/v1/ingestion/run/NEW_SOURCE_API
     ```
 4.  Check logs: `docker compose logs -f ingestion`.
+
+## Common Pitfalls & Solutions
+
+### 1. Data Not Showing on Map
+*   **Symptom**: Ingestion logs show 200 OK, but map is empty.
+*   **Cause**: GeoID Mismatch. The Source is likely sending Postal Codes (e.g., "TX") instead of FIPS Codes (e.g., "48").
+*   **Solution**:
+    1. Check the `fact_value` table: `SELECT * FROM fact_value WHERE source_id = 'YOUR_SOURCE';`
+    2. If `geo_id` contains letters, you must add a mapping step in your Adapter.
+    3. Run a cleanup migration to delete the bad data.
+
+### 2. "Metric Not Found" or Foreign Key Errors
+*   **Symptom**: Ingestion service logs error or database constraint violation.
+*   **Cause**: Typo in `metric_id` between `metrics.yaml`, Java Adapter, or Database.
+*   **Solution**: Ensure the string `MY_METRIC_ID` is identical in:
+    *   `metrics.yaml`
+    *   `MyAdapter.java` (in `getMetricDefinitions`)
+    *   `Vxx__Seed_Metrics.sql`
+
+### 3. Intelligence Service Crashing
+*   **Symptom**: `utility-explorer-intelligence` container exits during testing.
+*   **Cause**: Running heavy verification scripts (like `verify_nlp.py` with 50+ items) can OOM the container locally.
+*   **Solution**:
+    *   `docker compose restart intelligence` to recover.
+    *   Run tests in smaller batches.
+
+### 4. Schedule Badge Missing in UI
+*   **Symptom**: UI shows "Unknown Schedule" for your source.
+*   **Cause**: Missing entry in `source_config` table.
+*   **Solution**: Ensure you added the migration script (Step 6) and that valid CRON syntax is used.
 
 ## Examples
 

@@ -58,11 +58,20 @@ public final class ApiDtos {
         private String attributionText;
         private String notes;
         private boolean isMock;
+        private String scheduleStatus; // "Scheduled: Daily at 6 AM UTC", "Disabled", "Unknown"
+        private String lastRunAt;      // ISO string
+        private String nextRunAt;      // ISO string or description
 
         public SourceDto() {}
 
         public SourceDto(String sourceId, String name, String type, String termsUrl,
                          String attributionText, String notes, boolean isMock) {
+            this(sourceId, name, type, termsUrl, attributionText, notes, isMock, null, null, null);
+        }
+
+        public SourceDto(String sourceId, String name, String type, String termsUrl,
+                         String attributionText, String notes, boolean isMock,
+                         String scheduleStatus, String lastRunAt, String nextRunAt) {
             this.sourceId = sourceId;
             this.name = name;
             this.type = type;
@@ -70,6 +79,9 @@ public final class ApiDtos {
             this.attributionText = attributionText;
             this.notes = notes;
             this.isMock = isMock;
+            this.scheduleStatus = scheduleStatus;
+            this.lastRunAt = lastRunAt;
+            this.nextRunAt = nextRunAt;
         }
 
         public String getSourceId() { return sourceId; }
@@ -92,6 +104,15 @@ public final class ApiDtos {
 
         public boolean isMock() { return isMock; }
         public void setMock(boolean mock) { isMock = mock; }
+
+        public String getScheduleStatus() { return scheduleStatus; }
+        public void setScheduleStatus(String scheduleStatus) { this.scheduleStatus = scheduleStatus; }
+
+        public String getLastRunAt() { return lastRunAt; }
+        public void setLastRunAt(String lastRunAt) { this.lastRunAt = lastRunAt; }
+
+        public String getNextRunAt() { return nextRunAt; }
+        public void setNextRunAt(String nextRunAt) { this.nextRunAt = nextRunAt; }
     }
 
     public static class RegionDto {

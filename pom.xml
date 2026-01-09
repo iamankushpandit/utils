@@ -18,6 +18,7 @@
         <module>utility-explorer-ingestion</module>
         <module>utility-explorer-adapter-eia</module>
         <module>utility-explorer-adapter-acs</module>
+        <module>utility-explorer-adapter-weather</module>
     </modules>
 
     <properties>

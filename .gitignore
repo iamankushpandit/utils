@@ -57,3 +57,5 @@ Thumbs.db
 frontend.log
 frontend.pid
 .amazonq/
+.env
+utility-explorer-ui/.env

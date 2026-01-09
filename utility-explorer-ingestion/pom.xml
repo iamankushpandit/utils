@@ -30,6 +30,11 @@
             <artifactId>utility-explorer-adapter-acs</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.utilityexplorer</groupId>
+            <artifactId>utility-explorer-adapter-weather</artifactId>
+            <version>${project.parent.version}</version>
+        </dependency>
 
         <!-- Web & Swagger -->
         <dependency>

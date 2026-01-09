@@ -89,7 +89,44 @@ def run_test_suite():
         "Predict the cost of electricity in California next year.",
         "What will the bill be in Florida in 6 months?",
         "Trend prediction for New York electricity rates.",
-        "Project the future energy cost for 48201."
+        "Project the future energy cost for 48201.",
+
+        # --- WEATHER QUESTIONS (30) ---
+        # Weather Stress Index
+        "What is the current weather stress index in Texas?",
+        "Which state has the highest weather stress index right now?",
+        "Show me the weather stress for California.",
+        "Is the weather stress index high in Florida?",
+        "Compare weather stress between New York and New Jersey.",
+        "Provide the weather stress index for all states.",
+        "What was the weather stress in Alaska last month?",
+        "Map the weather stress index across the US.",
+        "Did the weather stress index increase in 2025?",
+        "Lowest weather stress index recorded currently.",
+
+        # Current Temperature
+        "What is the current temperature in Fahrenheit for Arizona?",
+        "Show me the temperature in Colorado.",
+        "Is it hotter in Texas or New Mexico right now?",
+        "Which state is the coldest currently?",
+        "Average temperature in Washington.",
+        "Temperature reading for FL.",
+        "How hot is it in Maine?",
+        "Show me the current temperature map.",
+        "What is the max temperature recorded today?",
+        "Temp in 06.",
+
+        # Temperature Anomaly
+        "What is the temperature anomaly in California?",
+        "Are temperatures higher than normal in New York?",
+        "Show me the temperature deviation for Texas.",
+        "Which state has the biggest temperature anomaly?",
+        "Is Florida experiencing a heat wave anomaly?",
+        "Compare temperature anomaly between North and South Dakota.",
+        "Temp anomaly for WA.",
+        "Are there any negative temperature anomalies today?",
+        "Map of temperature anomalies.",
+        "How much does the temperature deviate in Ohio?"
     ]
 
     print(f"\n🚀 Starting NLP Verification Suite ({len(questions)} Questions)...\n")
