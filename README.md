@@ -127,7 +127,36 @@ graph TD
 2. **Fetch:** Adapters query upstream APIs (EIA/Census) using configured keys.
 3. **Transform:** Raw JSON is normalized into `FactValue` entities.
 4. **Load:** Data is upserted into the PostgreSQL database.
-5. **Observe:** Metrics (rows ingested, duration) are pushed to Prometheus; Logs with trace IDs go to Loki.
+5.  **Observe:** Metrics (rows ingested, duration) are pushed to Prometheus; Logs with trace IDs go to Loki.
+
+### Observability Stack (LGTM)
+The project includes a pre-configured observability suite to debug and monitor the system locally.
+
+- **OpenTelemetry Collector (Otel):** The central nervous system. It receives telemetry (logs, metrics, traces) from the Java and Python applications and forwards them to the appropriate backend.
+- **Grafana (Visualization):** The single pane of glass. Login (`admin`/`admin`) to view dashboards combining metrics, logs, and traces.
+- **Prometheus (Metrics):** Stores numeric time-series data. It answers questions like "What is the request rate?" or "How much memory is the ingestion service using?".
+- **Jaeger (Tracing):** Provides distributed tracing. It allows you to visualize a single request's journey across multiple microservices to identify bottlenecks.
+- **Loki (Logs):** A log aggregation system optimized for efficient storage. It allows you to query logs using tags (like `app=api` or `traceID=xyz`).
+
+### 🛠️ Effective Observability Workflow
+Here is a recommended workflow for debugging issues using these tools:
+
+1.  **Spot the Issue in Grafana**
+    - Access [http://localhost:3000](http://localhost:3000) (User: `admin`, Pass: `admin`).
+    - Use the **Explore** tab to visualize high-level metrics (e.g., `http_server_requests_seconds_max`).
+    - If you see a spike in latency or errors, note the timestamp.
+
+2.  **Trace the Transaction in Jaeger**
+    - Open [http://localhost:16686](http://localhost:16686).
+    - Select the service (e.g., `utils-api`) and filter by the timestamp from step 1.
+    - Click **Find Traces** and select a trace to see the waterfall view.
+    - Identify which span (Database, External API, etc.) is failing or slow.
+    - Copy the `Trace ID` from the top of the viewer.
+
+3.  **Correlate with Logs in Loki**
+    - Return to Grafana's **Explore** tab and select **Loki** as the datasource.
+    - Run a query for the specific trace: `{trace_id="<YOUR_TRACE_ID>"}`.
+    - This reveals the exact log lines from all services (Java, Python) involved in that specific request context, allowing you to pinpoint the root cause.
 
 ## Data Model (Conceptual)
 | Table | Description |
